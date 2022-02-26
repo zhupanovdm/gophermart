@@ -1,22 +1,8 @@
 package balance
 
-import (
-	"github.com/zhupanovdm/gophermart/model"
-	"github.com/zhupanovdm/gophermart/model/order"
-	"time"
-)
+import "github.com/zhupanovdm/gophermart/model"
 
-type (
-	Balance struct {
-		Current   model.Money
-		Withdrawn model.Money
-	}
-
-	Withdrawal struct {
-		Number      order.Number
-		Sum         model.Money
-		ProcessedAt time.Time
-	}
-
-	Withdrawals []*Withdrawal
-)
+type Balance struct {
+	Current   model.Money `json:"current"`
+	Withdrawn model.Money `json:"withdrawn"`
+}

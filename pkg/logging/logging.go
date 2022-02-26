@@ -2,14 +2,13 @@ package logging
 
 import (
 	"context"
-	"github.com/zhupanovdm/gophermart/pkg/app"
 	"os"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-)
 
-type Option func(zerolog.Logger) zerolog.Logger
+	"github.com/zhupanovdm/gophermart/pkg/app"
+)
 
 const (
 	// ctxKeyLogger identifies logger instance bound within request context.
@@ -18,6 +17,20 @@ const (
 	// ctxKeyCorrelationID identifies request's correlation ID.
 	ctxKeyCorrelationID = app.ContextKey("CorrelationID")
 )
+
+type (
+	Option func(zerolog.Logger) zerolog.Logger
+
+	ContextUpdater interface {
+		UpdateLogContext(zerolog.Context) zerolog.Context
+	}
+
+	UpdateLogContext func(zerolog.Context) zerolog.Context
+)
+
+func (u UpdateLogContext) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
+	return u(ctx)
+}
 
 // GetOrCreateLogger returns context bound logger.
 // Creates a new one with correlation ID field than binds it to context.
@@ -35,9 +48,9 @@ func GetOrCreateLogger(ctx context.Context, options ...Option) (context.Context,
 	return SetLogger(ctx, logger), logger
 }
 
-func WithComponent(service string) Option {
+func WithService(service string) Option {
 	return func(logger zerolog.Logger) zerolog.Logger {
-		return logger.With().Str(ComponentKey, service).Logger()
+		return logger.With().Str(ServiceKey, service).Logger()
 	}
 }
 
@@ -52,13 +65,13 @@ func WithCID(ctx context.Context) Option {
 	}
 }
 
-func SetIfAbsentCID(ctx context.Context, cid string) (context.Context, string) {
+func SetIfAbsentCID(ctx context.Context, cidProvider func() string) (context.Context, string) {
 	if value := ctx.Value(ctxKeyCorrelationID); value != nil {
 		if cid, ok := value.(string); ok {
 			return ctx, cid
 		}
 	}
-	return SetCID(ctx, cid)
+	return SetCID(ctx, cidProvider())
 }
 
 func SetCID(ctx context.Context, cid string) (context.Context, string) {
@@ -90,4 +103,18 @@ func ApplyOptions(logger zerolog.Logger, options ...Option) zerolog.Logger {
 		logger = opt(logger)
 	}
 	return logger
+}
+
+func ContextWith(updaters ...ContextUpdater) UpdateLogContext {
+	return func(ctx zerolog.Context) zerolog.Context {
+		for _, updater := range updaters {
+			ctx = updater.UpdateLogContext(ctx)
+		}
+		return ctx
+	}
+}
+
+func ServiceLogger(ctx context.Context, serviceName string) (context.Context, zerolog.Logger) {
+	ctx, _ = SetIfAbsentCID(ctx, NewCID)
+	return GetOrCreateLogger(ctx, WithService(serviceName), WithCID(ctx))
 }

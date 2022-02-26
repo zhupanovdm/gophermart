@@ -3,42 +3,74 @@ package main
 import (
 	"context"
 	"crypto"
+
 	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/zhupanovdm/gophermart/handlers"
 	"github.com/zhupanovdm/gophermart/pkg/app"
 	"github.com/zhupanovdm/gophermart/pkg/hash"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/pkg/server"
-	"github.com/zhupanovdm/gophermart/service/auth"
+	"github.com/zhupanovdm/gophermart/service"
 	"github.com/zhupanovdm/gophermart/storage/psql"
+	"github.com/zhupanovdm/gophermart/storage/psql/migrate"
 )
 
-const appName = "GopherMart"
-const serverName = "HTTP Server"
+const (
+	appName    = "GopherMart"
+	serverName = "HTTP Server"
+)
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	_, logger := logging.GetOrCreateLogger(ctx, logging.WithComponent(appName))
 
-	gopherMartStorage := psql.New()
+	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(appName))
+	logger.Info().Msg("starting app")
 
-	jwtProvider := auth.JWT("np891yx2")
-	authService := auth.New(gopherMartStorage, hash.StringWith(crypto.SHA512), jwtProvider)
+	dbUrl := "postgresql://postgres:qwe54321@localhost:5432/gophermart?sslmode=disable"
+	if err := migrate.Prepare(ctx, dbUrl); err != nil {
+		logger.Err(err).Msg("failed to prepare app db")
+		return
+	}
 
-	userHandler := handlers.User(handlers.NewAuth(authService))
+	db, err := psql.NewConnection(ctx, dbUrl)
+	if err != nil {
+		logger.Err(err).Msg("failed to connect to app db")
+		return
+	}
+	defer db.Close()
+
+	ordersStorage := psql.Orders(db)
+
+	jwt := service.NewJWT([]byte("np891yx2"))
+	auth := service.NewAuth(psql.Users(db), jwt, hash.StringWith(crypto.SHA512))
+	orders := service.NewOrders(psql.Orders(db))
+	balance := service.NewBalance(psql.Balance(db), ordersStorage)
+
+	permitted := handlers.NewRequestMatcher()
+	if err := permitted.URLPattern("/api/user/login", "/api/user/register"); err != nil {
+		logger.Err(err).Msg("failed to set permitted urls")
+		return
+	}
+
 	rootHandler := server.Handler("/api/user",
-		userHandler,
+		handlers.NewUserHandler(
+			handlers.NewAuthenticationHandler(auth),
+			handlers.NewOrders(orders),
+			handlers.NewBalance(balance)),
 		middleware.RealIP,
 		server.CorrelationID,
 		server.Logger,
 		server.CompressGzip,
 		server.DecompressGzip,
+		handlers.NewAuthorizeMiddleware(auth, permitted),
 		middleware.Recoverer)
 
 	srvGroup := server.Start(ctx, ":8080", rootHandler, serverName)
 
 	<-app.TerminationSignal()
 	logger.Info().Msg("got shutdown signal")
+
 	cancel()
 	srvGroup.Wait()
 }

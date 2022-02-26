@@ -12,7 +12,7 @@ import (
 )
 
 func Start(ctx context.Context, addr string, handler http.Handler, name string) *sync.WaitGroup {
-	_, logger := logging.GetOrCreateLogger(ctx, logging.WithComponent(name))
+	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(name))
 
 	var wg sync.WaitGroup
 
@@ -20,7 +20,7 @@ func Start(ctx context.Context, addr string, handler http.Handler, name string) 
 		Addr:    addr,
 		Handler: handler,
 		ConnContext: func(ctx context.Context, _ net.Conn) context.Context {
-			ctx, _ = logging.GetOrCreateLogger(ctx, logging.WithComponent(name))
+			ctx, _ = logging.GetOrCreateLogger(ctx, logging.WithService(name))
 			return ctx
 		},
 	}
