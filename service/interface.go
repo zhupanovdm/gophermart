@@ -28,7 +28,10 @@ type (
 
 	Orders interface {
 		Register(context.Context, order.Number, user.ID) error
-		OrderByNumber(context.Context, order.Number) (*order.Order, error)
 		GetAll(context.Context, user.ID) (order.Orders, error)
+	}
+
+	Accruals interface {
+		Start(context.Context)
 	}
 )

@@ -32,7 +32,7 @@ func (h *authenticationHandler) Register(resp http.ResponseWriter, req *http.Req
 		logger.UpdateContext(logging.ContextWith(cred))
 
 		if err := h.Auth.Register(ctx, cred); err != nil {
-			if errors.ErrCode(err) == service.ErrUserAlreadyExists {
+			if errors.ErrCode(err) == service.ErrUserAlreadyRegistered {
 				logger.Err(err).Msg("specified login already in use")
 				server.Error(resp, http.StatusConflict, err)
 			} else {

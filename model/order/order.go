@@ -14,11 +14,12 @@ import (
 var _ logging.ContextUpdater = (*Number)(nil)
 
 type (
+	ID     int64
 	Number string
 	Status string
 
 	Order struct {
-		ID         int64        `json:"-"`
+		ID         ID           `json:"-"`
 		Number     Number       `json:"number"`
 		UserID     user.ID      `json:"-"`
 		Status     Status       `json:"status"`
@@ -36,12 +37,26 @@ const (
 	StatusProcessed  Status = "PROCESSED"
 )
 
-func (n Number) String() string {
-	return string(n)
+func (s Status) position() int {
+	switch s {
+	case StatusNew:
+		return 0
+	case StatusProcessing:
+		return 1
+	case StatusInvalid:
+		return 2
+	case StatusProcessed:
+		return 2
+	}
+	return -1
+}
+
+func (s Status) Compare(right Status) int {
+	return right.position() - s.position()
 }
 
 func (n Number) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Stringer(logging.OrderNumberKey, n)
+	return ctx.Str(logging.OrderNumberKey, string(n))
 }
 
 func (n Number) Validate(validators ...func(string) bool) error {

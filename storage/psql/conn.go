@@ -2,6 +2,7 @@ package psql
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -9,7 +10,11 @@ import (
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 )
 
-const pgxDriverName = "PGX Driver"
+const (
+	DefaultTimeout = 15 * time.Second
+
+	pgxDriverName = "PGX Driver"
+)
 
 type Connection struct {
 	*pgxpool.Pool
@@ -30,4 +35,8 @@ func NewConnection(ctx context.Context, url string) (*Connection, error) {
 
 type queryExecutor interface {
 	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
+
+type rowScanner interface {
+	Scan(...interface{}) error
 }

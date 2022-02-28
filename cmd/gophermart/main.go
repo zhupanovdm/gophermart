@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"crypto"
+	"github.com/zhupanovdm/gophermart/providers/accruals"
+	"sync"
 
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/zhupanovdm/gophermart/pkg/hash"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/pkg/server"
+	"github.com/zhupanovdm/gophermart/providers/accruals/http"
 	"github.com/zhupanovdm/gophermart/service"
 	"github.com/zhupanovdm/gophermart/storage/psql"
 	"github.com/zhupanovdm/gophermart/storage/psql/migrate"
@@ -42,12 +45,20 @@ func main() {
 
 	ordersStorage := psql.Orders(db)
 
+	clientFactory := func() accruals.Accruals {
+		return http.New("http://localhost:8080")
+	}
+
+	var wg1 sync.WaitGroup
+
+	service.NewAccruals(ordersStorage, clientFactory, &wg1).Start(ctx)
+
 	jwt := service.NewJWT([]byte("np891yx2"))
 	auth := service.NewAuth(psql.Users(db), jwt, hash.StringWith(crypto.SHA512))
-	orders := service.NewOrders(psql.Orders(db))
+	orders := service.NewOrders(ordersStorage)
 	balance := service.NewBalance(psql.Balance(db), ordersStorage)
 
-	permitted := handlers.NewRequestMatcher()
+	permitted := server.NewRequestMatcher()
 	if err := permitted.URLPattern("/api/user/login", "/api/user/register"); err != nil {
 		logger.Err(err).Msg("failed to set permitted urls")
 		return
@@ -66,11 +77,13 @@ func main() {
 		handlers.NewAuthorizeMiddleware(auth, permitted),
 		middleware.Recoverer)
 
-	srvGroup := server.Start(ctx, ":8080", rootHandler, serverName)
+	srvGroup := server.Start(ctx, ":8081", rootHandler, serverName)
 
 	<-app.TerminationSignal()
 	logger.Info().Msg("got shutdown signal")
 
 	cancel()
 	srvGroup.Wait()
+
+	wg1.Wait()
 }

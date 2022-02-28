@@ -2,6 +2,7 @@ package psql
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v4"
 
@@ -16,11 +17,15 @@ var _ storage.Users = (*usersStorage)(nil)
 
 type usersStorage struct {
 	*Connection
+	timeout time.Duration
 }
 
 func (u *usersStorage) UserByLogin(ctx context.Context, login string) (*user.User, error) {
 	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(usersStorageName))
 	logger.Trace().Msg("query user by login")
+
+	ctx, cancel := context.WithTimeout(ctx, u.timeout)
+	defer cancel()
 
 	usr, err := userByLogin(ctx, u, login)
 	if err != nil {
@@ -35,6 +40,9 @@ func (u *usersStorage) UserByID(ctx context.Context, id user.ID) (*user.User, er
 	logger.UpdateContext(logging.ContextWith(id))
 	logger.Trace().Msg("query user")
 
+	ctx, cancel := context.WithTimeout(ctx, u.timeout)
+	defer cancel()
+
 	return userByID(ctx, u, id)
 }
 
@@ -42,6 +50,9 @@ func (u *usersStorage) CreateUser(ctx context.Context, cred user.Credentials) (o
 	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(usersStorageName))
 	logger.UpdateContext(logging.ContextWith(cred))
 	logger.Info().Msg("persist new user")
+
+	ctx, cancel := context.WithTimeout(ctx, u.timeout)
+	defer cancel()
 
 	err = u.BeginTxFunc(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
 		var usr *user.User
@@ -67,6 +78,7 @@ func (u *usersStorage) CreateUser(ctx context.Context, cred user.Credentials) (o
 
 func userByLogin(ctx context.Context, db queryExecutor, login string) (*user.User, error) {
 	var u user.User
+
 	err := db.QueryRow(ctx, "SELECT id, login, password FROM users WHERE login=$1", login).Scan(&u.ID, &u.Login, &u.Password)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -90,5 +102,8 @@ func userByID(ctx context.Context, db queryExecutor, id user.ID) (*user.User, er
 }
 
 func Users(conn *Connection) storage.Users {
-	return &usersStorage{conn}
+	return &usersStorage{
+		Connection: conn,
+		timeout:    DefaultTimeout,
+	}
 }

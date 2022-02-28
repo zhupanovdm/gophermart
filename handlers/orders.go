@@ -2,15 +2,16 @@ package handlers
 
 import (
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
-	"github.com/zhupanovdm/gophermart/pkg/validation"
 	"io"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/zhupanovdm/gophermart/model/order"
 	"github.com/zhupanovdm/gophermart/pkg/errors"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/pkg/server"
+	"github.com/zhupanovdm/gophermart/pkg/validation"
 	"github.com/zhupanovdm/gophermart/service"
 )
 
@@ -45,7 +46,7 @@ func (h *ordersHandler) Register(resp http.ResponseWriter, req *http.Request) {
 		switch errors.ErrCode(err) {
 		case service.ErrOrderAlreadyRegistered:
 			logger.Warn().Msg("order has already registered")
-		case service.ErrOrderRegistrationConflict:
+		case service.ErrOrderNumberCollision:
 			logger.Err(err).Msg("invalid order number")
 			server.Error(resp, http.StatusConflict, err)
 		default:

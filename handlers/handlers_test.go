@@ -22,7 +22,7 @@ type authServiceMock struct{}
 
 func (a *authServiceMock) Register(_ context.Context, cred user.Credentials) error {
 	if cred.Login == SampleExists {
-		return errors.New(service.ErrUserAlreadyExists, SampleFakeString)
+		return errors.New(service.ErrUserAlreadyRegistered, SampleFakeString)
 	}
 	if cred.Login == SampleCrash {
 		return errors.New(errors.ErrUnknown, SampleFakeString)

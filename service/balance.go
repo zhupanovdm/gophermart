@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+
 	"github.com/zhupanovdm/gophermart/model/balance"
 	"github.com/zhupanovdm/gophermart/model/user"
 	"github.com/zhupanovdm/gophermart/pkg/errors"
@@ -11,13 +12,7 @@ import (
 
 var _ Balance = (*balanceImpl)(nil)
 
-const (
-	balanceServiceName = "Balance Service"
-
-	ErrInsufficientFunds errors.ErrorCode = iota
-	ErrOrderNotFound
-	ErrOrderWrongOwner
-)
+const balanceServiceName = "Balance Service"
 
 type balanceImpl struct {
 	storage.Balance
@@ -34,12 +29,12 @@ func (b *balanceImpl) Get(ctx context.Context, userID user.ID) (balance.Balance,
 
 func (b *balanceImpl) Withdraw(ctx context.Context, userID user.ID, withdraw balance.Withdraw) error {
 	ctx, logger := logging.ServiceLogger(ctx, balanceServiceName)
-	logger.UpdateContext(logging.ContextWith(withdraw.Number))
+	logger.UpdateContext(logging.ContextWith(withdraw.Order))
 	logger.Info().Msg("serving withdraw")
 
-	ord, err := b.OrderByNumber(ctx, withdraw.Number)
+	ord, err := b.Orders.OrderByNumber(ctx, withdraw.Order)
 	if err != nil {
-		logger.Err(err).Msg("failed to query order")
+		logger.Err(err).Msg("failed to query order by number")
 		return errors.Err(err)
 	}
 	if ord == nil {
@@ -50,7 +45,7 @@ func (b *balanceImpl) Withdraw(ctx context.Context, userID user.ID, withdraw bal
 		logger.Warn().Msg("order owner mismatch")
 		return errors.New(ErrOrderWrongOwner, "wrong owner")
 	}
-	ok, err := b.Balance.Withdraw(ctx, withdraw)
+	ok, err := b.Balance.Withdraw(ctx, ord.ID, withdraw.Sum)
 	if err != nil {
 		logger.Err(err).Msg("failed to withdraw")
 		return errors.Err(err)

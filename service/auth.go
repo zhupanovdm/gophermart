@@ -11,12 +11,7 @@ import (
 	"github.com/zhupanovdm/gophermart/storage"
 )
 
-const (
-	authServiceName = "Auth Service"
-
-	ErrUserAlreadyExists errors.ErrorCode = iota
-	ErrBadCredentials
-)
+const authServiceName = "Auth Service"
 
 var _ Auth = (*authImpl)(nil)
 
@@ -40,7 +35,7 @@ func (a *authImpl) Register(ctx context.Context, cred user.Credentials) error {
 	}
 	if !ok {
 		logger.Warn().Msg("user already exists")
-		return errors.New(ErrUserAlreadyExists, fmt.Sprintf("user already exists: %v", cred))
+		return errors.New(ErrUserAlreadyRegistered, fmt.Sprintf("user already exists: %v", cred))
 	}
 	return nil
 }

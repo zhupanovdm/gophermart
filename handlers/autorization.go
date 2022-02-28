@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"github.com/zhupanovdm/gophermart/service"
 	"net/http"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/zhupanovdm/gophermart/pkg/app"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/pkg/server"
+	"github.com/zhupanovdm/gophermart/service"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 
 type authorizationHandler struct {
 	service.Auth
-	permitted *RequestMatcher
+	permitted *server.RequestMatcher
 }
 
 func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handler {
@@ -60,7 +60,7 @@ func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handl
 	})
 }
 
-func NewAuthorizeMiddleware(auth service.Auth, permitted *RequestMatcher) func(http.Handler) http.Handler {
+func NewAuthorizeMiddleware(auth service.Auth, permitted *server.RequestMatcher) func(http.Handler) http.Handler {
 	return (&authorizationHandler{
 		Auth:      auth,
 		permitted: permitted,
