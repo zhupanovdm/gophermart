@@ -13,7 +13,7 @@ const (
 	SampleWrong      = "wrong"
 	SampleCrash      = "crash"
 	SampleFakeString = "fake"
-	SampleFakeId     = 777
+	SampleFakeID     = 777
 )
 
 var _ service.Auth = (*authServiceMock)(nil)
@@ -44,7 +44,7 @@ func (a *authServiceMock) Authorize(_ context.Context, token user.Token) (user.I
 	if token == SampleWrong {
 		return user.VoidID, errors.New(service.ErrBadCredentials, SampleFakeString)
 	}
-	return user.ID(SampleFakeId), nil
+	return user.ID(SampleFakeID), nil
 }
 
 func NewAuthServiceMock() service.Auth {

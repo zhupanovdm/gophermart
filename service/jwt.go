@@ -26,7 +26,7 @@ type jwtImpl struct {
 }
 
 func (j *jwtImpl) Token(ctx context.Context, usr *user.User) (user.Token, error) {
-	ctx, logger := logging.ServiceLogger(ctx, jwtServiceName, logging.With(usr))
+	_, logger := logging.ServiceLogger(ctx, jwtServiceName, logging.With(usr))
 	logger.Info().Msg("retrieving security token")
 
 	t, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -44,7 +44,7 @@ func (j *jwtImpl) Token(ctx context.Context, usr *user.User) (user.Token, error)
 }
 
 func (j *jwtImpl) Authenticate(ctx context.Context, authToken user.Token) (user.ID, error) {
-	ctx, logger := logging.ServiceLogger(ctx, jwtServiceName)
+	_, logger := logging.ServiceLogger(ctx, jwtServiceName)
 	logger.Info().Msg("authenticating with token")
 
 	token, err := jwt.Parse(string(authToken), func(token *jwt.Token) (interface{}, error) {

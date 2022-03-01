@@ -26,7 +26,7 @@ func (h *balanceHandler) Get(resp http.ResponseWriter, req *http.Request) {
 	ctx, logger := logging.ServiceLogger(req.Context(), balanceHandlerName)
 	logger.Info().Msg("handling client balance query")
 
-	currentBalance, err := h.Balance.Get(ctx, AuthorizedUserId(ctx))
+	currentBalance, err := h.Balance.Get(ctx, AuthorizedUserID(ctx))
 	if err != nil {
 		logger.Err(err).Msg("failed to query balance")
 		server.Error(resp, http.StatusInternalServerError, nil)
@@ -55,7 +55,7 @@ func (h *balanceHandler) Withdraw(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := h.Balance.Withdraw(ctx, AuthorizedUserId(ctx), withdraw); err != nil {
+	if err := h.Balance.Withdraw(ctx, AuthorizedUserID(ctx), withdraw); err != nil {
 		switch errors.ErrCode(err) {
 		case service.ErrOrderWrongOwner:
 		case service.ErrOrderNotFound:
@@ -77,7 +77,7 @@ func (h *balanceHandler) Withdrawals(resp http.ResponseWriter, req *http.Request
 	ctx, logger := logging.ServiceLogger(req.Context(), balanceHandlerName)
 	logger.Info().Msg("handling withdrawals query")
 
-	withdrawals, err := h.Balance.Withdrawals(ctx, AuthorizedUserId(ctx))
+	withdrawals, err := h.Balance.Withdrawals(ctx, AuthorizedUserID(ctx))
 	if err != nil {
 		logger.Err(err).Msg("failed to query withdrawals")
 		server.Error(resp, http.StatusInternalServerError, nil)

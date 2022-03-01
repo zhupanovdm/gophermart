@@ -75,14 +75,14 @@ func (a *authImpl) Authorize(ctx context.Context, token user.Token) (user.ID, er
 	ctx, logger := logging.ServiceLogger(ctx, authServiceName)
 	logger.Info().Msg("authorizing client request")
 
-	userId, err := a.jwt.Authenticate(ctx, token)
+	userID, err := a.jwt.Authenticate(ctx, token)
 	if err != nil {
 		logger.Err(err).Msg("invalid token")
 		return user.VoidID, errors.New(ErrBadCredentials, "invalid token")
 	}
 
 	logger.Info().Msg("authorized")
-	return userId, nil
+	return userID, nil
 }
 
 func NewAuth(cfg *config.Config, users storage.Users, jwt JWT) Auth {

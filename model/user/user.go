@@ -19,7 +19,7 @@ const (
 	VoidID    = ID(0)
 	VoidToken = Token("")
 
-	IdLogKey    = "user_id"
+	IDLogKey    = "user_id"
 	LoginLogKey = "user_login"
 )
 
@@ -80,7 +80,7 @@ func (t Token) String() string {
 }
 
 func (id ID) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Stringer(IdLogKey, id)
+	return ctx.Stringer(IDLogKey, id)
 }
 
 func (id ID) String() string {

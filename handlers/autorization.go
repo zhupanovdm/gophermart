@@ -23,7 +23,7 @@ const (
 
 type authorizationHandler struct {
 	service.Auth
-	permitted *server.UrlMatcher
+	permitted *server.URLMatcher
 }
 
 func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handler {
@@ -44,32 +44,32 @@ func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handl
 			return
 		}
 
-		userId, err := h.Auth.Authorize(ctx, user.Token(token[len(TokenPrefix):]))
+		userID, err := h.Auth.Authorize(ctx, user.Token(token[len(TokenPrefix):]))
 		if err != nil {
 			logger.Err(err).Msg("client authentication failed")
 			server.Error(resp, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
 
-		logger.UpdateContext(logging.ContextWith(userId))
+		logger.UpdateContext(logging.ContextWith(userID))
 		ctx = logging.SetLogger(ctx, logger)
 
 		logger.Trace().Msg("client request authorized")
 
-		next.ServeHTTP(resp, req.WithContext(context.WithValue(ctx, CtxKeyUserID, userId)))
+		next.ServeHTTP(resp, req.WithContext(context.WithValue(ctx, CtxKeyUserID, userID)))
 	})
 }
 
-func NewAuthorizeMiddleware(auth service.Auth, permitted *server.UrlMatcher) func(http.Handler) http.Handler {
+func NewAuthorizeMiddleware(auth service.Auth, permitted *server.URLMatcher) func(http.Handler) http.Handler {
 	return (&authorizationHandler{
 		Auth:      auth,
 		permitted: permitted,
 	}).AuthorizeMiddleware
 }
 
-func AuthorizedUserId(ctx context.Context) user.ID {
-	if userId, ok := ctx.Value(CtxKeyUserID).(user.ID); ok {
-		return userId
+func AuthorizedUserID(ctx context.Context) user.ID {
+	if userID, ok := ctx.Value(CtxKeyUserID).(user.ID); ok {
+		return userID
 	}
 	return user.VoidID
 }

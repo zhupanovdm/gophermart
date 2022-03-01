@@ -14,7 +14,7 @@ import (
 
 const (
 	NumberLogKey = "order_number"
-	IdLogKey     = "order_id"
+	IDLogKey     = "order_id"
 )
 
 var _ logging.ContextUpdater = (*Order)(nil)
@@ -50,7 +50,7 @@ func (o *Order) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
 }
 
 func (i ID) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Stringer(IdLogKey, i)
+	return ctx.Stringer(IDLogKey, i)
 }
 
 func (i ID) String() string {

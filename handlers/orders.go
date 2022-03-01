@@ -42,7 +42,7 @@ func (h *ordersHandler) Register(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err = h.Orders.Register(ctx, number, AuthorizedUserId(ctx)); err != nil {
+	if err = h.Orders.Register(ctx, number, AuthorizedUserID(ctx)); err != nil {
 		switch errors.ErrCode(err) {
 		case service.ErrOrderAlreadyRegistered:
 			logger.Warn().Msg("order has already registered")
@@ -66,7 +66,7 @@ func (h *ordersHandler) GetAll(resp http.ResponseWriter, req *http.Request) {
 	ctx, logger := logging.ServiceLogger(req.Context(), ordersHandlerName)
 	logger.Info().Msg("handle client orders query")
 
-	orders, err := h.Orders.GetAll(ctx, AuthorizedUserId(ctx))
+	orders, err := h.Orders.GetAll(ctx, AuthorizedUserID(ctx))
 	if err != nil {
 		logger.Err(err).Msg("orders query failed")
 		server.Error(resp, http.StatusInternalServerError, nil)

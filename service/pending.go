@@ -17,9 +17,7 @@ func (p *PendingOrders) AddAll(orders order.Orders) {
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
 
-	for _, ord := range orders {
-		p.orders = append(p.orders, ord)
-	}
+	p.orders = append(p.orders, orders...)
 	p.cond.Signal()
 }
 

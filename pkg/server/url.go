@@ -7,11 +7,11 @@ import (
 	"regexp"
 )
 
-type UrlMatcher struct {
+type URLMatcher struct {
 	urlPatterns []*regexp.Regexp
 }
 
-func (r *UrlMatcher) SetPattern(patterns ...string) error {
+func (r *URLMatcher) SetPattern(patterns ...string) error {
 	for i, p := range patterns {
 		expr, err := regexp.Compile(p)
 		if err != nil {
@@ -22,7 +22,7 @@ func (r *UrlMatcher) SetPattern(patterns ...string) error {
 	return nil
 }
 
-func (r *UrlMatcher) Match(req *http.Request) bool {
+func (r *URLMatcher) Match(req *http.Request) bool {
 	for _, pattern := range r.urlPatterns {
 		if pattern.MatchString(req.URL.Path) {
 			return true
@@ -31,8 +31,8 @@ func (r *UrlMatcher) Match(req *http.Request) bool {
 	return false
 }
 
-func NewURLMatcher() *UrlMatcher {
-	return &UrlMatcher{
+func NewURLMatcher() *URLMatcher {
+	return &URLMatcher{
 		urlPatterns: make([]*regexp.Regexp, 0),
 	}
 }

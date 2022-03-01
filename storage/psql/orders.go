@@ -140,7 +140,7 @@ func (o *ordersStorage) Update(ctx context.Context, orderID order.ID, status ord
 	logger.Info().Msg("querying client orders")
 
 	return o.BeginFunc(ctx, func(tx pgx.Tx) error {
-		ord, err := orderById(ctx, tx, orderID)
+		ord, err := orderByID(ctx, tx, orderID)
 		if err != nil {
 			logger.Err(err).Msg("failed to query order by id")
 			return err
@@ -169,7 +169,7 @@ func orderByNumber(ctx context.Context, db queryExecutor, number order.Number) (
 	return fetchOrder(db.QueryRow(ctx, "SELECT id, number, user_id, status, uploaded_at FROM orders WHERE number = $1", number))
 }
 
-func orderById(ctx context.Context, db queryExecutor, id order.ID) (*order.Order, error) {
+func orderByID(ctx context.Context, db queryExecutor, id order.ID) (*order.Order, error) {
 	return fetchOrder(db.QueryRow(ctx, "SELECT id, number, user_id, status, uploaded_at FROM orders WHERE id = $1", id))
 }
 

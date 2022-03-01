@@ -20,7 +20,7 @@ import (
 const (
 	RetryAfterHeader = "Retry-After"
 
-	accrualsHttpClientName = "Accruals HTTP Client"
+	accrualsHTTPClientName = "Accruals HTTP Client"
 )
 
 var _ accruals.Accruals = (*client)(nil)
@@ -31,7 +31,7 @@ type client struct {
 }
 
 func (c client) Get(ctx context.Context, number string) (*model.AccrualResponse, error) {
-	ctx, logger := logging.ServiceLogger(ctx, accrualsHttpClientName)
+	ctx, logger := logging.ServiceLogger(ctx, accrualsHTTPClientName)
 	logger.Info().Msg("querying accruals service")
 
 	accrualsURL := *c.url
