@@ -58,6 +58,8 @@ func (h *balanceHandler) Withdraw(resp http.ResponseWriter, req *http.Request) {
 	if err := h.Balance.Withdraw(ctx, AuthorizedUserID(ctx), withdraw); err != nil {
 		switch errors.ErrCode(err) {
 		case service.ErrOrderWrongOwner:
+			server.Error(resp, http.StatusUnprocessableEntity, "invalid order number")
+			return
 		case service.ErrOrderNotFound:
 			server.Error(resp, http.StatusUnprocessableEntity, "invalid order number")
 			return

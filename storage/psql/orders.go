@@ -191,7 +191,7 @@ WHERE
 
 func fetchOrder(s rowScanner) (*order.Order, error) {
 	var ord order.Order
-	var accrual sql.NullInt64
+	var accrual sql.NullFloat64
 
 	err := s.Scan(&ord.ID, &ord.Number, &ord.Status, &accrual, &ord.UserID, &ord.UploadedAt)
 	if err != nil {
@@ -201,11 +201,10 @@ func fetchOrder(s rowScanner) (*order.Order, error) {
 		return nil, err
 	}
 
-	sum := model.Sum(accrual.Int64)
+	sum := model.Sum(accrual.Float64)
 	if accrual.Valid {
 		ord.Accrual = &sum
 	}
-
 	return &ord, nil
 }
 
