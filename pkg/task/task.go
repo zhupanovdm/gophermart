@@ -24,8 +24,12 @@ func (t Task) With(options ...Option) Task {
 	return task
 }
 
-// CompletionWait provides ability to track Task execution completion with the given sync.WaitGroup instance.
-func CompletionWait(wg *sync.WaitGroup) Option {
+func (t Task) Go(ctx context.Context) {
+	go t(ctx)
+}
+
+// WaitGroup provides ability to track Task execution completion with the given sync.WaitGroup instance.
+func WaitGroup(wg *sync.WaitGroup) Option {
 	return func(task Task) Task {
 		wg.Add(1)
 		return func(ctx context.Context) {

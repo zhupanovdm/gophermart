@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+
 	"github.com/zhupanovdm/gophermart/model"
 	"github.com/zhupanovdm/gophermart/model/balance"
 	"github.com/zhupanovdm/gophermart/model/order"
@@ -21,16 +22,18 @@ type (
 	}
 
 	Orders interface {
-		Store(context.Context, *order.Order) (*order.Order, bool, error)
+		Create(context.Context, *order.Order) (*order.Order, bool, error)
+		Update(context.Context, order.ID, order.Status, *model.Sum) error
+
 		OrderByNumber(ctx context.Context, number order.Number) (*order.Order, error)
+
 		OrdersByUser(context.Context, user.ID) (order.Orders, error)
 		OrdersByStatus(context.Context, ...order.Status) (order.Orders, error)
-		Update(context.Context, order.ID, order.Status, *model.Money) error
 	}
 
 	Balance interface {
 		Get(context.Context, user.ID) (balance.Balance, error)
-		Withdraw(context.Context, order.ID, model.Money) (bool, error)
+		Withdraw(context.Context, order.ID, model.Sum) (bool, error)
 		Withdrawals(context.Context, user.ID) (balance.Withdrawals, error)
 	}
 )

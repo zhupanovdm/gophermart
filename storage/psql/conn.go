@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	"github.com/zhupanovdm/gophermart/config"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 )
 
@@ -20,10 +21,10 @@ type Connection struct {
 	*pgxpool.Pool
 }
 
-func NewConnection(ctx context.Context, url string) (*Connection, error) {
+func NewConnection(ctx context.Context, cfg *config.Config) (*Connection, error) {
 	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(pgxDriverName))
 
-	pool, err := pgxpool.Connect(ctx, url)
+	pool, err := pgxpool.Connect(ctx, cfg.DatabaseURI)
 	if err != nil {
 		logger.Err(err).Msg("failed to establish connection pool")
 		return nil, err

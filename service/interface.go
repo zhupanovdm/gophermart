@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync"
 
 	"github.com/zhupanovdm/gophermart/model/balance"
 	"github.com/zhupanovdm/gophermart/model/order"
@@ -32,6 +33,6 @@ type (
 	}
 
 	Accruals interface {
-		Start(context.Context)
+		Start(context.Context, *sync.WaitGroup) error
 	}
 )

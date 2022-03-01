@@ -2,11 +2,11 @@ package service
 
 import (
 	"context"
-	"github.com/zhupanovdm/gophermart/model"
-	"runtime"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/zhupanovdm/gophermart/config"
 	"github.com/zhupanovdm/gophermart/model/order"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/pkg/task"
@@ -14,138 +14,68 @@ import (
 	"github.com/zhupanovdm/gophermart/storage"
 )
 
-const DefaultInterval = 5 * time.Second
-
 const accrualsServiceName = "Accruals Service"
 
 var _ Accruals = (*accrualsImpl)(nil)
 
 type accrualsImpl struct {
-	storage.Orders
-	clientFactory func() accruals.Accruals
-	pending       *PendingOrders
-	interval      time.Duration
-	*sync.WaitGroup
+	orders               storage.Orders
+	createAccrualsClient func() (accruals.Accruals, error)
+	pending              *PendingOrders
+	wg                   *sync.WaitGroup
+	interval             time.Duration
+	workerCount          int
 }
 
-func (a *accrualsImpl) Start(ctx context.Context) {
+func (a *accrualsImpl) Start(ctx context.Context, wg *sync.WaitGroup) error {
 	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(accrualsServiceName))
-	logger.Info().Msg("starting accruals processing")
+	logger.Info().Msg("start serving orders")
 
-	for i := 0; i < runtime.NumCPU(); i++ {
-		NewWorker(a.Orders, a.clientFactory(), a.pending).Start(ctx)
+	for i := 0; i < a.workerCount; i++ {
+		worker, err := a.worker(fmt.Sprintf("%s (worker %d)", accrualsServiceName, i))
+		if err != nil {
+			logger.Err(err).Msg("failed to create worker")
+			return err
+		}
+		worker.With(task.WaitGroup(wg)).Go(ctx)
 	}
 
-	background := task.Task(a.ProceedProcessing).
+	task.Task(a.fetchOrders).
 		With(task.PeriodicRun(a.interval)).
-		With(task.CompletionWait(a.WaitGroup))
+		With(task.WaitGroup(wg)).
+		Go(ctx)
 
-	go background(ctx)
+	return nil
 }
 
-func (a *accrualsImpl) ProceedProcessing(ctx context.Context) {
-	ctx, logger := logging.ServiceLogger(ctx, accrualsServiceName)
-	logger.Info().Msg("serving order process")
-
-	orders, err := a.OrdersByStatus(ctx, order.StatusNew, order.StatusProcessing)
+func (a *accrualsImpl) worker(name string) (task.Task, error) {
+	client, err := a.createAccrualsClient()
 	if err != nil {
-		logger.Err(err).Msg("failed to get orders to process")
+		return nil, err
+	}
+	return NewWorker(name, a.orders, client, a.pending), nil
+}
+
+func (a *accrualsImpl) fetchOrders(ctx context.Context) {
+	ctx, logger := logging.ServiceLogger(ctx, accrualsServiceName)
+	logger.Info().Msg("polling unprocessed orders")
+
+	orders, err := a.orders.OrdersByStatus(ctx, order.StatusNew, order.StatusProcessing)
+	if err != nil {
+		logger.Err(err).Msg("failed to poll orders for processing")
 		return
 	}
 
+	logger.Trace().Msgf("got %d orders", len(orders))
 	a.pending.AddAll(orders)
 }
 
-func NewAccruals(ordersStorage storage.Orders, clientFactory func() accruals.Accruals, wg *sync.WaitGroup) Accruals {
+func NewAccruals(cfg *config.Config, ordersStorage storage.Orders, clientFactory accruals.ClientFactory, pending *PendingOrders) Accruals {
 	return &accrualsImpl{
-		Orders:        ordersStorage,
-		pending:       NewPendingOrders(),
-		clientFactory: clientFactory,
-		WaitGroup:     wg,
-		interval:      DefaultInterval,
-	}
-}
-
-type PendingOrders struct {
-	sync.Mutex
-	sequence []order.ID
-	set      map[order.ID]*order.Order
-	*sync.Cond
-}
-
-func NewPendingOrders() *PendingOrders {
-	pendingOrders := PendingOrders{
-		sequence: make([]order.ID, 0),
-		set:      make(map[order.ID]*order.Order),
-	}
-	pendingOrders.Cond = sync.NewCond(&pendingOrders)
-	return &pendingOrders
-}
-
-func (p *PendingOrders) Add(orders ...*order.Order) {
-	p.Lock()
-	defer p.Unlock()
-
-	for _, ord := range orders {
-		if _, ok := p.set[ord.ID]; ok {
-			continue
-		}
-		p.set[ord.ID] = ord
-		p.sequence = append(p.sequence, ord.ID)
-	}
-
-	p.Signal()
-}
-
-func (p *PendingOrders) AddAll(orders order.Orders) {
-	p.Add(orders...)
-}
-
-func (p *PendingOrders) Get() *order.Order {
-	p.Lock()
-	defer p.Unlock()
-	for len(p.sequence) == 0 {
-		p.Wait()
-	}
-	id := p.sequence[0]
-	p.sequence = p.sequence[1:]
-
-	ord := p.set[id]
-	delete(p.set, id)
-
-	return ord
-}
-
-type Worker struct {
-	client  accruals.Accruals
-	pending *PendingOrders
-	storage.Orders
-}
-
-func (w *Worker) Start(ctx context.Context) {
-	for {
-		ord := w.pending.Get()
-		resp, err := w.client.Get(ctx, string(ord.Number))
-		if err != nil {
-			if code, e := accruals.GetError(err); code == accruals.ErrTooManyRequest {
-				<-time.After(e.RetryAfter)
-				w.pending.Add(ord)
-				continue
-			}
-		}
-
-		err = w.Orders.Update(ctx, ord.ID, resp.Status.ToCanonical(), (*model.Money)(resp.Accrual))
-		if err != nil {
-
-		}
-
-	}
-}
-
-func NewWorker(ordersStorage storage.Orders, client accruals.Accruals, pending *PendingOrders) *Worker {
-	return &Worker{
-		Orders:  ordersStorage,
-		client:  client,
-		pending: pending,
+		orders:               ordersStorage,
+		createAccrualsClient: clientFactory,
+		pending:              pending,
+		interval:             cfg.AccrualsPollingInterval,
+		workerCount:          cfg.AccrualsWorkersCount,
 	}
 }

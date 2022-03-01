@@ -2,4 +2,4 @@ package model
 
 const NilObjectString = "<nil>"
 
-type Money float64
+type Sum float64

@@ -6,16 +6,17 @@ import (
 	"github.com/go-pg/migrations/v8"
 	"github.com/go-pg/pg/v10"
 
+	"github.com/zhupanovdm/gophermart/config"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 )
 
 const migrationToolName = "PG Migration Tool"
 
-func Prepare(ctx context.Context, URL string) error {
+func Prepare(ctx context.Context, cfg *config.Config) error {
 	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(migrationToolName))
 	logger.Info().Msg("preparing db")
 
-	opt, err := pg.ParseURL(URL)
+	opt, err := pg.ParseURL(cfg.DatabaseURI)
 	if err != nil {
 		return err
 	}

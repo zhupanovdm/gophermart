@@ -26,13 +26,6 @@ func New(code ErrorCode, description string) *Error {
 	}
 }
 
-func Err(err error) *Error {
-	return &Error{
-		Code:  ErrUnknown,
-		error: err,
-	}
-}
-
 func ErrCode(err error) ErrorCode {
 	if e, ok := err.(*Error); ok {
 		return e.Code

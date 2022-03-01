@@ -15,58 +15,62 @@ var _ Balance = (*balanceImpl)(nil)
 const balanceServiceName = "Balance Service"
 
 type balanceImpl struct {
-	storage.Balance
-	storage.Orders
+	balance storage.Balance
+	orders  storage.Orders
 }
 
 func (b *balanceImpl) Get(ctx context.Context, userID user.ID) (balance.Balance, error) {
-	ctx, logger := logging.ServiceLogger(ctx, balanceServiceName)
-	logger.UpdateContext(logging.ContextWith(userID))
-	logger.Info().Msg("querying balance")
+	_, logger := logging.ServiceLogger(ctx, balanceServiceName, logging.With(userID))
+	logger.Info().Msg("querying client balance")
 
-	return b.Balance.Get(ctx, userID)
+	return b.balance.Get(ctx, userID)
 }
 
 func (b *balanceImpl) Withdraw(ctx context.Context, userID user.ID, withdraw balance.Withdraw) error {
-	ctx, logger := logging.ServiceLogger(ctx, balanceServiceName)
-	logger.UpdateContext(logging.ContextWith(withdraw.Order))
+	ctx, logger := logging.ServiceLogger(ctx, balanceServiceName, logging.With(userID, withdraw.Order))
 	logger.Info().Msg("serving withdraw")
 
-	ord, err := b.Orders.OrderByNumber(ctx, withdraw.Order)
+	ord, err := b.orders.OrderByNumber(ctx, withdraw.Order)
 	if err != nil {
-		logger.Err(err).Msg("failed to query order by number")
-		return errors.Err(err)
+		logger.Err(err).Msg("failed to query order by number from storage")
+		return err
 	}
 	if ord == nil {
-		logger.Warn().Msg("order not found")
+		logger.Warn().Msg("order by number not found")
 		return errors.New(ErrOrderNotFound, "order not found")
 	}
 	if ord.UserID != userID {
 		logger.Warn().Msg("order owner mismatch")
 		return errors.New(ErrOrderWrongOwner, "wrong owner")
 	}
-	ok, err := b.Balance.Withdraw(ctx, ord.ID, withdraw.Sum)
+
+	logger = logging.ApplyOptions(logger, logging.With(ord))
+	ctx = logging.SetLogger(ctx, logger)
+
+	ok, err := b.balance.Withdraw(ctx, ord.ID, withdraw.Sum)
 	if err != nil {
-		logger.Err(err).Msg("failed to withdraw")
-		return errors.Err(err)
+		logger.Err(err).Msg("failed to post withdraw transaction")
+		return err
 	}
 	if !ok {
-		logger.Warn().Msg("insufficient funds")
-		return errors.New(ErrInsufficientFunds, "insufficient funds")
+		logger.Warn().Msg("insufficient balance")
+		return errors.New(ErrInsufficientFunds, "insufficient balance")
 	}
+
+	logger.Trace().Msg("withdraw successful")
 	return nil
 }
 
 func (b *balanceImpl) Withdrawals(ctx context.Context, userID user.ID) (balance.Withdrawals, error) {
-	ctx, logger := logging.ServiceLogger(ctx, balanceServiceName)
-	logger.Info().Msg("querying withdrawals")
+	ctx, logger := logging.ServiceLogger(ctx, balanceServiceName, logging.With(userID))
+	logger.Info().Msg("querying client withdrawals")
 
-	return b.Balance.Withdrawals(ctx, userID)
+	return b.balance.Withdrawals(ctx, userID)
 }
 
 func NewBalance(balanceStorage storage.Balance, ordersStorage storage.Orders) Balance {
 	return &balanceImpl{
-		Balance: balanceStorage,
-		Orders:  ordersStorage,
+		balance: balanceStorage,
+		orders:  ordersStorage,
 	}
 }

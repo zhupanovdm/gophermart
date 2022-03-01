@@ -2,6 +2,7 @@ package order
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -11,6 +12,13 @@ import (
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 )
 
+const (
+	NumberLogKey = "order_number"
+	IdLogKey     = "order_id"
+)
+
+var _ logging.ContextUpdater = (*Order)(nil)
+var _ logging.ContextUpdater = (*ID)(nil)
 var _ logging.ContextUpdater = (*Number)(nil)
 
 type (
@@ -19,12 +27,12 @@ type (
 	Status string
 
 	Order struct {
-		ID         ID           `json:"-"`
-		Number     Number       `json:"number"`
-		UserID     user.ID      `json:"-"`
-		Status     Status       `json:"status"`
-		Accrual    *model.Money `json:"accrual,omitempty"`
-		UploadedAt time.Time    `json:"uploaded_at"`
+		ID         ID         `json:"-"`
+		Number     Number     `json:"number"`
+		UserID     user.ID    `json:"-"`
+		Status     Status     `json:"status"`
+		Accrual    *model.Sum `json:"accrual,omitempty"`
+		UploadedAt time.Time  `json:"uploaded_at"`
 	}
 
 	Orders []*Order
@@ -36,6 +44,18 @@ const (
 	StatusInvalid    Status = "INVALID"
 	StatusProcessed  Status = "PROCESSED"
 )
+
+func (o *Order) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
+	return logging.ContextWith(o.Number, o.ID).UpdateLogContext(ctx)
+}
+
+func (i ID) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
+	return ctx.Stringer(IdLogKey, i)
+}
+
+func (i ID) String() string {
+	return fmt.Sprintf("%d", i)
+}
 
 func (s Status) position() int {
 	switch s {
@@ -56,7 +76,11 @@ func (s Status) Compare(right Status) int {
 }
 
 func (n Number) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Str(logging.OrderNumberKey, string(n))
+	return ctx.Stringer(NumberLogKey, n)
+}
+
+func (n Number) String() string {
+	return string(n)
 }
 
 func (n Number) Validate(validators ...func(string) bool) error {

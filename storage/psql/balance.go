@@ -23,39 +23,41 @@ type balanceStorage struct {
 	timeout time.Duration
 }
 
-func (b *balanceStorage) Get(ctx context.Context, userId user.ID) (balance.Balance, error) {
-	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName)
-	logger.UpdateContext(logging.ContextWith(userId))
+func (b *balanceStorage) Get(ctx context.Context, userID user.ID) (balance.Balance, error) {
+	ctx, cancel := context.WithTimeout(ctx, b.timeout)
+	defer cancel()
+
+	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName, logging.With(userID))
 	logger.Info().Msg("querying client balance")
 
-	sql := `
+	query := `
 SELECT
     COALESCE(a.sum, 0) - COALESCE(w.sum, 0), COALESCE(w.sum, 0)
 FROM
     (SELECT sum(accrual) sum FROM orders WHERE user_id = $1) a,
     (SELECT sum(sum) sum FROM withdrawals w, orders o WHERE w.order_id = o.id AND o.user_id = $1) w`
 
-	ctx, cancel := context.WithTimeout(ctx, b.timeout)
-	defer cancel()
-
 	var sum balance.Balance
-	if err := b.QueryRow(ctx, sql, userId).Scan(&sum.Current, &sum.Withdrawn); err != nil {
+	if err := b.QueryRow(ctx, query, userID).Scan(&sum.Current, &sum.Withdrawn); err != nil {
 		if err == pgx.ErrNoRows {
-			logger.Warn().Msg("balance record not found")
+			logger.Warn().Msg("client's balance record not found")
 			return balance.Balance{}, nil
 		}
+
 		logger.Err(err).Msg("failed to query client balance")
 		return balance.Balance{}, err
 	}
+
+	logger.Trace().Msg("success")
 	return sum, nil
 }
 
-func (b *balanceStorage) Withdraw(ctx context.Context, orderID order.ID, requestedSum model.Money) (ok bool, err error) {
-	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName)
-	logger.Info().Msg("processing withdraw")
-
+func (b *balanceStorage) Withdraw(ctx context.Context, orderID order.ID, requested model.Sum) (ok bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, b.timeout)
 	defer cancel()
+
+	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName, logging.With(orderID))
+	logger.Info().Msg("processing withdraw")
 
 	err = b.BeginTxFunc(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
 		sum, err := orderBalance(ctx, tx, orderID)
@@ -63,26 +65,31 @@ func (b *balanceStorage) Withdraw(ctx context.Context, orderID order.ID, request
 			logger.Err(err).Msg("failed to query order balance")
 			return err
 		}
-		if sum < requestedSum {
+		if sum < requested {
+			logger.Warn().Msg("requested sum exceeds available client balance")
 			return nil
 		}
 		if _, err = tx.Exec(ctx, "INSERT INTO withdrawals(order_id, sum, processed_at) VALUES($1,$2,$3)",
-			orderID, requestedSum, time.Now().Local()); err != nil {
-			logger.Err(err).Msg("failed to withdraw")
+			orderID, requested, time.Now().Local()); err != nil {
+			logger.Err(err).Msg("failed to store withdraw transaction")
 			return err
 		}
+
 		ok = true
+		logger.Trace().Msg("success")
 		return nil
 	})
 	return
 }
 
-func (b *balanceStorage) Withdrawals(ctx context.Context, userId user.ID) (balance.Withdrawals, error) {
-	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName)
-	logger.UpdateContext(logging.ContextWith(userId))
+func (b *balanceStorage) Withdrawals(ctx context.Context, userID user.ID) (balance.Withdrawals, error) {
+	ctx, cancel := context.WithTimeout(ctx, b.timeout)
+	defer cancel()
+
+	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName, logging.With(userID))
 	logger.Info().Msg("querying client withdrawals")
 
-	sql := `
+	query := `
 SELECT
 	sum,
 	order_number,
@@ -94,10 +101,7 @@ WHERE
 	order_number = number
 	AND user_id = $1`
 
-	ctx, cancel := context.WithTimeout(ctx, b.timeout)
-	defer cancel()
-
-	rows, err := b.Query(ctx, sql, userId)
+	rows, err := b.Query(ctx, query, userID)
 	if err != nil {
 		logger.Err(err).Msg("failed to query withdrawals")
 		return nil, err
@@ -106,7 +110,7 @@ WHERE
 
 	list := make(balance.Withdrawals, 0)
 	for rows.Next() {
-		w := balance.Withdrawal{}
+		var w balance.Withdrawal
 		list = append(list, &w)
 		if err := rows.Scan(&w.Sum, &w.Order, w.ProcessedAt); err != nil {
 			logger.Err(err).Msg("failed to query withdrawals")
@@ -120,8 +124,8 @@ WHERE
 	return list, nil
 }
 
-func orderBalance(ctx context.Context, db queryExecutor, orderID order.ID) (model.Money, error) {
-	sql := `
+func orderBalance(ctx context.Context, db queryExecutor, orderID order.ID) (model.Sum, error) {
+	query := `
 SELECT
     COALESCE(accrual, 0) - COALESCE((SELECT sum(sum) FROM withdrawals WHERE order_id = $1), 0)
 FROM
@@ -129,12 +133,12 @@ FROM
 WHERE
     id = $1`
 
-	var sum model.Money
-	if err := db.QueryRow(ctx, sql, orderID).Scan(&sum); err != nil {
+	var sum model.Sum
+	if err := db.QueryRow(ctx, query, orderID).Scan(&sum); err != nil {
 		if err == pgx.ErrNoRows {
-			return model.Money(0), nil
+			return model.Sum(0), nil
 		}
-		return model.Money(0), err
+		return model.Sum(0), err
 	}
 	return sum, nil
 }

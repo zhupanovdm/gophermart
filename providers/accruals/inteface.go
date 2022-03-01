@@ -23,6 +23,8 @@ type (
 		message    string
 		RetryAfter time.Duration
 	}
+
+	ClientFactory func() (Accruals, error)
 )
 
 var _ error = (*Error)(nil)

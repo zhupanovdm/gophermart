@@ -65,6 +65,12 @@ func WithCID(ctx context.Context) Option {
 	}
 }
 
+func With(updaters ...ContextUpdater) Option {
+	return func(logger zerolog.Logger) zerolog.Logger {
+		return ContextWith(updaters...).UpdateLogContext(logger.With()).Logger()
+	}
+}
+
 func SetIfAbsentCID(ctx context.Context, cidProvider func() string) (context.Context, string) {
 	if value := ctx.Value(ctxKeyCorrelationID); value != nil {
 		if cid, ok := value.(string); ok {
@@ -114,7 +120,9 @@ func ContextWith(updaters ...ContextUpdater) UpdateLogContext {
 	}
 }
 
-func ServiceLogger(ctx context.Context, serviceName string) (context.Context, zerolog.Logger) {
+func ServiceLogger(ctx context.Context, serviceName string, options ...Option) (context.Context, zerolog.Logger) {
 	ctx, _ = SetIfAbsentCID(ctx, NewCID)
-	return GetOrCreateLogger(ctx, WithService(serviceName), WithCID(ctx))
+	ctx, logger := GetOrCreateLogger(ctx, WithService(serviceName), WithCID(ctx))
+	logger = ApplyOptions(logger, options...)
+	return SetLogger(ctx, logger), logger
 }

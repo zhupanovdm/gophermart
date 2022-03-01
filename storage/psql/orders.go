@@ -2,6 +2,7 @@ package psql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -23,16 +24,15 @@ type ordersStorage struct {
 	timeout time.Duration
 }
 
-func (o *ordersStorage) Store(ctx context.Context, newOrder *order.Order) (ord *order.Order, ok bool, err error) {
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName)
-	logger.UpdateContext(logging.ContextWith(newOrder.Number))
-	logger.Info().Msg("storing new order")
-
+func (o *ordersStorage) Create(ctx context.Context, newOrd *order.Order) (ord *order.Order, ok bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
+	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(newOrd))
+	logger.Info().Msg("storing new order")
+
 	err = o.BeginTxFunc(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
-		if ord, err = orderByNumber(ctx, tx, newOrder.Number); err != nil {
+		if ord, err = orderByNumber(ctx, tx, newOrd.Number); err != nil {
 			logger.Err(err).Msg("failed to check existing order with the same number")
 			return err
 		} else if ord != nil {
@@ -41,43 +41,47 @@ func (o *ordersStorage) Store(ctx context.Context, newOrder *order.Order) (ord *
 		}
 
 		if _, err = tx.Exec(ctx, "INSERT INTO orders(number,user_id,status,uploaded_at) VALUES($1,$2,$3,$4)",
-			newOrder.Number, newOrder.UserID, newOrder.Status, newOrder.UploadedAt); err != nil {
+			newOrd.Number, newOrd.UserID, newOrd.Status, newOrd.UploadedAt); err != nil {
 			logger.Err(err).Msg("failed to persist new order")
 			return err
 		}
-
-		if ord, err = orderByNumber(ctx, tx, newOrder.Number); err != nil {
-			logger.Err(err).Msg("failed to query order")
+		if ord, err = orderByNumber(ctx, tx, newOrd.Number); err != nil {
+			logger.Err(err).Msg("failed to query created order")
 			return err
 		}
+
 		ok = true
+		logger.Trace().Msg("success")
 		return nil
 	})
 	return
 }
 
 func (o *ordersStorage) OrderByNumber(ctx context.Context, number order.Number) (*order.Order, error) {
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName)
-	logger.UpdateContext(logging.ContextWith(number))
-	logger.Info().Msg("query order by number")
-
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
+
+	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(number))
+	logger.Info().Msg("query order by number")
 
 	return orderByNumber(ctx, o, number)
 }
 
-func (o *ordersStorage) OrdersByUser(ctx context.Context, userId user.ID) (order.Orders, error) {
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName)
+func (o *ordersStorage) OrdersByUser(ctx context.Context, userID user.ID) (order.Orders, error) {
+	ctx, cancel := context.WithTimeout(ctx, o.timeout)
+	defer cancel()
+
+	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(userID))
 	logger.Info().Msg("querying client orders")
 
-	sql := `
+	query := `
 SELECT
 	id,
 	number,
 	status,
-	uploaded_at,
-	accrual
+	accrual,
+	user_id,
+	uploaded_at
 FROM
 	orders
 WHERE
@@ -85,10 +89,7 @@ WHERE
 ORDER BY
 	uploaded_at`
 
-	ctx, cancel := context.WithTimeout(ctx, o.timeout)
-	defer cancel()
-
-	rows, err := o.Query(ctx, sql, userId)
+	rows, err := o.Query(ctx, query, userID)
 	if err != nil {
 		logger.Err(err).Msg("failed to query client orders")
 		return nil, err
@@ -96,28 +97,34 @@ ORDER BY
 	return fetchOrders(ctx, rows)
 }
 
-func (o *ordersStorage) OrdersByStatus(ctx context.Context, status ...order.Status) (order.Orders, error) {
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName)
-	logger.Info().Msg("querying orders")
+func (o *ordersStorage) OrdersByStatus(ctx context.Context, statuses ...order.Status) (order.Orders, error) {
+	ctx, cancel := context.WithTimeout(ctx, o.timeout)
+	defer cancel()
 
-	sql := `
+	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName)
+	logger.Info().Msg("querying orders by status")
+
+	stringStatuses := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		stringStatuses = append(stringStatuses, string(status))
+	}
+
+	query := `
 SELECT
 	id,
 	number,
 	status,
-	uploaded_at,
-	accrual
+	accrual,
+	user_id,
+	uploaded_at
 FROM
 	orders
 WHERE
-	status IN ($1)
+	status = ANY($1)
 ORDER BY
 	uploaded_at`
 
-	ctx, cancel := context.WithTimeout(ctx, o.timeout)
-	defer cancel()
-
-	rows, err := o.Query(ctx, sql, status)
+	rows, err := o.Query(ctx, query, stringStatuses)
 	if err != nil {
 		logger.Err(err).Msg("failed to query orders")
 		return nil, err
@@ -125,17 +132,17 @@ ORDER BY
 	return fetchOrders(ctx, rows)
 }
 
-func (o *ordersStorage) Update(ctx context.Context, orderID order.ID, status order.Status, accrual *model.Money) error {
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName)
-	logger.Info().Msg("querying client orders")
-
+func (o *ordersStorage) Update(ctx context.Context, orderID order.ID, status order.Status, accrual *model.Sum) error {
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
+
+	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(orderID))
+	logger.Info().Msg("querying client orders")
 
 	return o.BeginFunc(ctx, func(tx pgx.Tx) error {
 		ord, err := orderById(ctx, tx, orderID)
 		if err != nil {
-			logger.Err(err).Msg("failed to query order")
+			logger.Err(err).Msg("failed to query order by id")
 			return err
 		}
 
@@ -152,6 +159,8 @@ func (o *ordersStorage) Update(ctx context.Context, orderID order.ID, status ord
 			logger.Err(err).Msg("failed to update order")
 			return err
 		}
+
+		logger.Trace().Msg("success")
 		return nil
 	})
 }
@@ -166,13 +175,21 @@ func orderById(ctx context.Context, db queryExecutor, id order.ID) (*order.Order
 
 func fetchOrder(s rowScanner) (*order.Order, error) {
 	var ord order.Order
-	err := s.Scan(&ord.ID, &ord.Number, &ord.UserID, &ord.Status, &ord.UploadedAt)
+	var accrual sql.NullInt64
+
+	err := s.Scan(&ord.ID, &ord.Number, &ord.Status, &accrual, &ord.UserID, &ord.UploadedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+
+	sum := model.Sum(accrual.Int64)
+	if accrual.Valid {
+		ord.Accrual = &sum
+	}
+
 	return &ord, nil
 }
 

@@ -18,6 +18,9 @@ var _ logging.ContextUpdater = (*ID)(nil)
 const (
 	VoidID    = ID(0)
 	VoidToken = Token("")
+
+	IdLogKey    = "user_id"
+	LoginLogKey = "user_login"
 )
 
 type (
@@ -44,7 +47,10 @@ func (u *User) String() string {
 }
 
 func (u *User) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Str(logging.UserLoginKey, u.Login).Int64(logging.UserIdKey, int64(u.ID))
+	if u == nil {
+		return ctx
+	}
+	return logging.ContextWith(u.ID, u.Credentials).UpdateLogContext(ctx)
 }
 
 func (c Credentials) Validate() error {
@@ -66,7 +72,7 @@ func (c Credentials) String() string {
 }
 
 func (c Credentials) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Str(logging.UserLoginKey, c.Login)
+	return ctx.Str(LoginLogKey, c.Login)
 }
 
 func (t Token) String() string {
@@ -74,7 +80,7 @@ func (t Token) String() string {
 }
 
 func (id ID) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Int64(logging.UserIdKey, int64(id))
+	return ctx.Stringer(IdLogKey, id)
 }
 
 func (id ID) String() string {

@@ -10,7 +10,7 @@ import (
 type (
 	Withdraw struct {
 		Order order.Number `json:"order"`
-		Sum   model.Money  `json:"sum"`
+		Sum   model.Sum    `json:"sum"`
 	}
 
 	Withdrawal struct {

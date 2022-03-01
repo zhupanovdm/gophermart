@@ -23,7 +23,7 @@ const (
 
 type authorizationHandler struct {
 	service.Auth
-	permitted *server.RequestMatcher
+	permitted *server.UrlMatcher
 }
 
 func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handler {
@@ -31,7 +31,7 @@ func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handl
 		ctx, logger := logging.ServiceLogger(req.Context(), authorizationHandlerName)
 		logger.Info().Msg("authorizing client's request")
 
-		if h.permitted.MatchURL(req) {
+		if h.permitted.Match(req) {
 			logger.Info().Msg("requested url is permitted")
 			next.ServeHTTP(resp, req)
 			return
@@ -60,7 +60,7 @@ func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handl
 	})
 }
 
-func NewAuthorizeMiddleware(auth service.Auth, permitted *server.RequestMatcher) func(http.Handler) http.Handler {
+func NewAuthorizeMiddleware(auth service.Auth, permitted *server.UrlMatcher) func(http.Handler) http.Handler {
 	return (&authorizationHandler{
 		Auth:      auth,
 		permitted: permitted,

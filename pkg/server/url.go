@@ -3,14 +3,15 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 )
 
-type RequestMatcher struct {
+type UrlMatcher struct {
 	urlPatterns []*regexp.Regexp
 }
 
-func (r *RequestMatcher) URLPattern(patterns ...string) error {
+func (r *UrlMatcher) SetPattern(patterns ...string) error {
 	for i, p := range patterns {
 		expr, err := regexp.Compile(p)
 		if err != nil {
@@ -21,7 +22,7 @@ func (r *RequestMatcher) URLPattern(patterns ...string) error {
 	return nil
 }
 
-func (r *RequestMatcher) MatchURL(req *http.Request) bool {
+func (r *UrlMatcher) Match(req *http.Request) bool {
 	for _, pattern := range r.urlPatterns {
 		if pattern.MatchString(req.URL.Path) {
 			return true
@@ -30,8 +31,19 @@ func (r *RequestMatcher) MatchURL(req *http.Request) bool {
 	return false
 }
 
-func NewRequestMatcher() *RequestMatcher {
-	return &RequestMatcher{
+func NewURLMatcher() *UrlMatcher {
+	return &UrlMatcher{
 		urlPatterns: make([]*regexp.Regexp, 0),
 	}
+}
+
+func ParseURL(addr string) (*url.URL, error) {
+	u, err := url.Parse(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid destination address: %s: %w", addr, err)
+	}
+	if u.Host == "" {
+		return ParseURL("http://" + addr)
+	}
+	return u, nil
 }
