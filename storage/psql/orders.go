@@ -166,11 +166,27 @@ func (o *ordersStorage) Update(ctx context.Context, orderID order.ID, status ord
 }
 
 func orderByNumber(ctx context.Context, db queryExecutor, number order.Number) (*order.Order, error) {
-	return fetchOrder(db.QueryRow(ctx, "SELECT id, number, user_id, status, uploaded_at FROM orders WHERE number = $1", number))
+	query := `
+SELECT
+	id, number, status, accrual, user_id, uploaded_at
+FROM
+	orders
+WHERE
+	number = $1`
+
+	return fetchOrder(db.QueryRow(ctx, query, number))
 }
 
 func orderByID(ctx context.Context, db queryExecutor, id order.ID) (*order.Order, error) {
-	return fetchOrder(db.QueryRow(ctx, "SELECT id, number, user_id, status, uploaded_at FROM orders WHERE id = $1", id))
+	query := `
+SELECT
+	id, number, status, accrual, user_id, uploaded_at
+FROM
+	orders
+WHERE
+	id = $1`
+
+	return fetchOrder(db.QueryRow(ctx, query, id))
 }
 
 func fetchOrder(s rowScanner) (*order.Order, error) {

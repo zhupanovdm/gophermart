@@ -84,6 +84,7 @@ func (h *balanceHandler) Withdrawals(resp http.ResponseWriter, req *http.Request
 		return
 	}
 
+	resp.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(resp).Encode(withdrawals); err != nil {
 		logger.Err(err).Msg("failed to encode response")
 		server.Error(resp, http.StatusInternalServerError, nil)
