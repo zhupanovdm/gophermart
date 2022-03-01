@@ -16,7 +16,7 @@ const (
 	DefaultJWTSecretKey            = "Very Secret Key"
 	DefaultJWTTTL                  = 24 * time.Hour
 	DefaultCryptoHash              = crypto.SHA256
-	DefaultAccrualsPollingInterval = 5 * time.Second
+	DefaultAccrualsPollingInterval = 2 * time.Second
 )
 
 type Config struct {

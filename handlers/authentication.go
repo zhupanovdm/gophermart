@@ -43,6 +43,8 @@ func (h *authenticationHandler) Register(resp http.ResponseWriter, req *http.Req
 		}
 
 		logger.Info().Msg("user registered")
+
+		h.authenticate(ctx, cred, resp)
 	}
 }
 
@@ -54,25 +56,30 @@ func (h *authenticationHandler) Login(resp http.ResponseWriter, req *http.Reques
 	logger.Info().Msg("handling client authentication request")
 
 	if cred, ok := h.decodeAuthRequest(ctx, resp, req); ok {
-		logger.UpdateContext(logging.ContextWith(cred))
+		h.authenticate(ctx, cred, resp)
+	}
+}
 
-		token, err := h.Auth.Login(ctx, cred)
-		if err != nil {
-			if errors.ErrCode(err) == service.ErrBadCredentials {
-				logger.Err(err).Msg("client authentication failed")
-				server.Error(resp, http.StatusUnauthorized, err)
-				return
-			}
+func (h *authenticationHandler) authenticate(ctx context.Context, cred user.Credentials, resp http.ResponseWriter) {
+	_, logger := logging.GetOrCreateLogger(ctx)
+	logger.UpdateContext(logging.ContextWith(cred))
 
-			logger.Err(err).Msg("failed to register user")
-			server.Error(resp, http.StatusInternalServerError, nil)
+	token, err := h.Auth.Login(ctx, cred)
+	if err != nil {
+		if errors.ErrCode(err) == service.ErrBadCredentials {
+			logger.Err(err).Msg("client authentication failed")
+			server.Error(resp, http.StatusUnauthorized, err)
 			return
 		}
 
-		resp.Header().Set(AuthorizationHeader, fmt.Sprintf("%s%v", TokenPrefix, token))
-
-		logger.Info().Msg("user authenticated")
+		logger.Err(err).Msg("failed to register user")
+		server.Error(resp, http.StatusInternalServerError, nil)
+		return
 	}
+
+	resp.Header().Set(AuthorizationHeader, fmt.Sprintf("%s%v", TokenPrefix, token))
+
+	logger.Info().Msg("user authenticated")
 }
 
 func (h *authenticationHandler) decodeAuthRequest(ctx context.Context, resp http.ResponseWriter, req *http.Request) (cred user.Credentials, ok bool) {
