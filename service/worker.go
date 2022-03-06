@@ -68,7 +68,7 @@ func (w *AccrualsWorker) process(ctx context.Context, ord *order.Order) {
 		}
 
 		logger.Info().Msg("updating order")
-		if err = w.orders.Update(ctx, ord.ID, resp.Status.ToCanonical(), (*model.Sum)(resp.Accrual)); err != nil {
+		if err = w.orders.Update(ctx, ord.Number, resp.Status.ToCanonical(), (*model.Sum)(resp.Accrual)); err != nil {
 			logger.Err(err).Msg("failed to update order")
 		}
 

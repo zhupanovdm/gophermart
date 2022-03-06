@@ -2,7 +2,6 @@ package order
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -12,22 +11,16 @@ import (
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 )
 
-const (
-	NumberLogKey = "order_number"
-	IDLogKey     = "order_id"
-)
+const NumberLogKey = "order_number"
 
 var _ logging.ContextUpdater = (*Order)(nil)
-var _ logging.ContextUpdater = (*ID)(nil)
 var _ logging.ContextUpdater = (*Number)(nil)
 
 type (
-	ID     int64
 	Number string
 	Status string
 
 	Order struct {
-		ID         ID         `json:"-"`
 		Number     Number     `json:"number"`
 		UserID     user.ID    `json:"-"`
 		Status     Status     `json:"status"`
@@ -46,15 +39,7 @@ const (
 )
 
 func (o *Order) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return logging.ContextWith(o.Number, o.ID).UpdateLogContext(ctx)
-}
-
-func (i ID) UpdateLogContext(ctx zerolog.Context) zerolog.Context {
-	return ctx.Stringer(IDLogKey, i)
-}
-
-func (i ID) String() string {
-	return fmt.Sprintf("%d", i)
+	return logging.ContextWith(o.Number).UpdateLogContext(ctx)
 }
 
 func (s Status) position() int {
@@ -99,4 +84,12 @@ func New(number Number, userID user.ID) *Order {
 		Status:     StatusNew,
 		UploadedAt: time.Now().Local(),
 	}
+}
+
+func StatusesToStrings(statuses []Status) []string {
+	stringStatuses := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		stringStatuses = append(stringStatuses, string(status))
+	}
+	return stringStatuses
 }

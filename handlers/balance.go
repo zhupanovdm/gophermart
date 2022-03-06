@@ -2,12 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"github.com/zhupanovdm/gophermart/pkg/validation"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/zhupanovdm/gophermart/model/balance"
-	"github.com/zhupanovdm/gophermart/pkg/errors"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/pkg/server"
 	"github.com/zhupanovdm/gophermart/service"
@@ -55,18 +56,14 @@ func (h *balanceHandler) Withdraw(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if err := withdraw.Order.Validate(validation.OnlyDigits, validation.Luhn); err != nil {
+		server.Error(resp, http.StatusUnprocessableEntity, "invalid order number")
+		return
+	}
 	if err := h.Balance.Withdraw(ctx, AuthorizedUserID(ctx), withdraw); err != nil {
-		switch errors.ErrCode(err) {
-		case service.ErrOrderWrongOwner:
-			server.Error(resp, http.StatusUnprocessableEntity, "invalid order number")
-			return
-		case service.ErrOrderNotFound:
-			server.Error(resp, http.StatusUnprocessableEntity, "invalid order number")
-			return
-		case service.ErrInsufficientFunds:
+		if errors.Is(err, service.ErrInsufficientFunds) {
 			server.Error(resp, http.StatusPaymentRequired, "balance is not enough to withdraw requested sum")
-			return
-		default:
+		} else {
 			server.Error(resp, http.StatusInternalServerError, nil)
 		}
 	}

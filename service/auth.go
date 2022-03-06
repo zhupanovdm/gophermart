@@ -2,11 +2,9 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/zhupanovdm/gophermart/config"
 	"github.com/zhupanovdm/gophermart/model/user"
-	"github.com/zhupanovdm/gophermart/pkg/errors"
 	"github.com/zhupanovdm/gophermart/pkg/hash"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/storage"
@@ -32,7 +30,7 @@ func (a *authImpl) Register(ctx context.Context, cred user.Credentials) error {
 		return err
 	} else if !ok {
 		logger.Warn().Msg("user already exists")
-		return errors.New(ErrUserAlreadyRegistered, fmt.Sprintf("user already exists: %v", cred))
+		return ErrUserAlreadyRegistered
 	}
 
 	logger.Info().Msg("user registered")
@@ -50,7 +48,7 @@ func (a *authImpl) Login(ctx context.Context, cred user.Credentials) (user.Token
 	}
 	if usr == nil {
 		logger.Warn().Msg("user not found")
-		return user.VoidToken, errors.New(ErrBadCredentials, "invalid credentials")
+		return user.VoidToken, ErrBadCredentials
 	}
 	logger = logging.ApplyOptions(logger, logging.With(usr))
 	ctx = logging.SetLogger(ctx, logger)
@@ -58,7 +56,7 @@ func (a *authImpl) Login(ctx context.Context, cred user.Credentials) (user.Token
 	cred.HashPassword(a.passwdHash)
 	if cred.Password != usr.Password {
 		logger.Warn().Msg("invalid credentials")
-		return user.VoidToken, errors.New(ErrBadCredentials, "invalid credentials")
+		return user.VoidToken, ErrBadCredentials
 	}
 
 	token, err := a.jwt.Token(ctx, usr)
@@ -78,7 +76,7 @@ func (a *authImpl) Authorize(ctx context.Context, token user.Token) (user.ID, er
 	userID, err := a.jwt.Authenticate(ctx, token)
 	if err != nil {
 		logger.Err(err).Msg("invalid token")
-		return user.VoidID, errors.New(ErrBadCredentials, "invalid token")
+		return user.VoidID, ErrBadCredentials
 	}
 
 	logger.Info().Msg("authorized")

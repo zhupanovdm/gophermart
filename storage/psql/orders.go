@@ -3,6 +3,7 @@ package psql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,7 +16,11 @@ import (
 	"github.com/zhupanovdm/gophermart/storage"
 )
 
-const ordersStorageName = "Orders PSQL Storage"
+const (
+	ordersStorageName = "Orders PSQL Storage"
+
+	ordersQuery = `SELECT number, status, accrual, user_id, uploaded_at FROM orders`
+)
 
 var _ storage.Orders = (*ordersStorage)(nil)
 
@@ -24,47 +29,33 @@ type ordersStorage struct {
 	timeout time.Duration
 }
 
-func (o *ordersStorage) Create(ctx context.Context, newOrd *order.Order) (ord *order.Order, ok bool, err error) {
+func (o *ordersStorage) Create(ctx context.Context, ordNew *order.Order) (ord *order.Order, ok bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(newOrd))
+	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(ordNew))
 	logger.Info().Msg("storing new order")
 
 	err = o.BeginTxFunc(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
-		if ord, err = orderByNumber(ctx, tx, newOrd.Number); err != nil {
+		if ord, err = orderByNumber(ctx, tx, ordNew.Number); err != nil {
 			logger.Err(err).Msg("failed to check existing order with the same number")
 			return err
-		} else if ord != nil {
-			logger.Warn().Msg("order already exists")
+		}
+		if ord != nil {
+			logger.Warn().Msg("order withe same number already exists")
 			return nil
 		}
-
-		if _, err = tx.Exec(ctx, "INSERT INTO orders(number,user_id,status,uploaded_at) VALUES($1,$2,$3,$4)",
-			newOrd.Number, newOrd.UserID, newOrd.Status, newOrd.UploadedAt); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO orders(number, user_id, status, uploaded_at) VALUES($1, $2, $3, $4)`,
+			ordNew.Number, ordNew.UserID, ordNew.Status, ordNew.UploadedAt); err != nil {
 			logger.Err(err).Msg("failed to persist new order")
 			return err
 		}
-		if ord, err = orderByNumber(ctx, tx, newOrd.Number); err != nil {
-			logger.Err(err).Msg("failed to query created order")
-			return err
-		}
-
 		ok = true
+		ord = ordNew
 		logger.Trace().Msg("success")
 		return nil
 	})
 	return
-}
-
-func (o *ordersStorage) OrderByNumber(ctx context.Context, number order.Number) (*order.Order, error) {
-	ctx, cancel := context.WithTimeout(ctx, o.timeout)
-	defer cancel()
-
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(number))
-	logger.Info().Msg("query order by number")
-
-	return orderByNumber(ctx, o, number)
 }
 
 func (o *ordersStorage) OrdersByUser(ctx context.Context, userID user.ID) (order.Orders, error) {
@@ -74,27 +65,12 @@ func (o *ordersStorage) OrdersByUser(ctx context.Context, userID user.ID) (order
 	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(userID))
 	logger.Info().Msg("querying client orders")
 
-	query := `
-SELECT
-	id,
-	number,
-	status,
-	accrual,
-	user_id,
-	uploaded_at
-FROM
-	orders
-WHERE
-	user_id = $1
-ORDER BY
-	uploaded_at`
-
-	rows, err := o.Query(ctx, query, userID)
+	rows, err := o.Query(ctx, ordersQuery+` WHERE user_id = $1 ORDER BY uploaded_at`, userID)
 	if err != nil {
 		logger.Err(err).Msg("failed to query client orders")
 		return nil, err
 	}
-	return fetchOrders(ctx, rows)
+	return fetchOrders(rows)
 }
 
 func (o *ordersStorage) OrdersByStatus(ctx context.Context, statuses ...order.Status) (order.Orders, error) {
@@ -104,103 +80,63 @@ func (o *ordersStorage) OrdersByStatus(ctx context.Context, statuses ...order.St
 	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName)
 	logger.Info().Msg("querying orders by status")
 
-	stringStatuses := make([]string, 0, len(statuses))
-	for _, status := range statuses {
-		stringStatuses = append(stringStatuses, string(status))
-	}
-
-	query := `
-SELECT
-	id,
-	number,
-	status,
-	accrual,
-	user_id,
-	uploaded_at
-FROM
-	orders
-WHERE
-	status = ANY($1)
-ORDER BY
-	uploaded_at`
-
-	rows, err := o.Query(ctx, query, stringStatuses)
+	rows, err := o.Query(ctx, ordersQuery+` WHERE status = ANY($1) ORDER BY uploaded_at`, order.StatusesToStrings(statuses))
 	if err != nil {
 		logger.Err(err).Msg("failed to query orders")
 		return nil, err
 	}
-	return fetchOrders(ctx, rows)
+	return fetchOrders(rows)
 }
 
-func (o *ordersStorage) Update(ctx context.Context, orderID order.ID, status order.Status, accrual *model.Sum) error {
+func (o *ordersStorage) Update(ctx context.Context, number order.Number, status order.Status, accrual *model.Sum) error {
 	ctx, cancel := context.WithTimeout(ctx, o.timeout)
 	defer cancel()
 
-	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(orderID))
+	ctx, logger := logging.ServiceLogger(ctx, ordersStorageName, logging.With(number))
 	logger.Info().Msg("querying client orders")
 
 	return o.BeginFunc(ctx, func(tx pgx.Tx) error {
-		ord, err := orderByID(ctx, tx, orderID)
+		ord, err := orderByNumber(ctx, tx, number)
 		if err != nil {
-			logger.Err(err).Msg("failed to query order by id")
+			logger.Err(err).Msg("failed to read existing order")
 			return err
 		}
-
+		if ord == nil {
+			err := fmt.Errorf("order with number doesn't exist: %v", number)
+			logger.Err(err).Msg("failed to read existing order")
+			return err
+		}
 		if change := ord.Status.Compare(status); change == 0 {
 			logger.Warn().Msg("status is unchanged: skipping update")
 			return nil
 		} else if change < 0 {
-			err = fmt.Errorf("can't descend order status: from %v to %v", ord.Status, status)
+			err := fmt.Errorf("can't descend order status: from %v to %v", ord.Status, status)
 			logger.Err(err).Msg("failed to update order")
 			return err
 		}
-
-		if _, err := o.Exec(ctx, "UPDATE orders SET status = $2, accrual = $3 WHERE id = $1", orderID, status, accrual); err != nil {
+		if _, err := o.Exec(ctx, "UPDATE orders SET status = $2, accrual = $3 WHERE number = $1", number, status, accrual); err != nil {
 			logger.Err(err).Msg("failed to update order")
 			return err
 		}
-
 		logger.Trace().Msg("success")
 		return nil
 	})
 }
 
 func orderByNumber(ctx context.Context, db queryExecutor, number order.Number) (*order.Order, error) {
-	query := `
-SELECT
-	id, number, status, accrual, user_id, uploaded_at
-FROM
-	orders
-WHERE
-	number = $1`
-
-	return fetchOrder(db.QueryRow(ctx, query, number))
-}
-
-func orderByID(ctx context.Context, db queryExecutor, id order.ID) (*order.Order, error) {
-	query := `
-SELECT
-	id, number, status, accrual, user_id, uploaded_at
-FROM
-	orders
-WHERE
-	id = $1`
-
-	return fetchOrder(db.QueryRow(ctx, query, id))
+	return fetchOrder(db.QueryRow(ctx, ordersQuery+` WHERE number = $1`, number))
 }
 
 func fetchOrder(s rowScanner) (*order.Order, error) {
 	var ord order.Order
 	var accrual sql.NullFloat64
-
-	err := s.Scan(&ord.ID, &ord.Number, &ord.Status, &accrual, &ord.UserID, &ord.UploadedAt)
+	err := s.Scan(&ord.Number, &ord.Status, &accrual, &ord.UserID, &ord.UploadedAt)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-
 	sum := model.Sum(accrual.Float64)
 	if accrual.Valid {
 		ord.Accrual = &sum
@@ -208,26 +144,20 @@ func fetchOrder(s rowScanner) (*order.Order, error) {
 	return &ord, nil
 }
 
-func fetchOrders(ctx context.Context, rows pgx.Rows) (order.Orders, error) {
+func fetchOrders(rows pgx.Rows) (order.Orders, error) {
 	defer rows.Close()
-
-	_, logger := logging.GetOrCreateLogger(ctx)
 
 	orders := make(order.Orders, 0)
 	for rows.Next() {
 		ord, err := fetchOrder(rows)
 		if err != nil {
-			logger.Err(err).Msg("failed to fetch orders")
 			return nil, err
 		}
 		orders = append(orders, ord)
 	}
 	if err := rows.Err(); err != nil {
-		logger.Err(err).Msg("failed to fetch orders")
 		return nil, err
 	}
-
-	logger.Trace().Msgf("got %d records", len(orders))
 	return orders, nil
 }
 

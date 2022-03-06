@@ -1,15 +1,11 @@
 package service
 
-import "github.com/zhupanovdm/gophermart/pkg/errors"
+import "errors"
 
-const (
-	ErrBadCredentials errors.ErrorCode = iota
-	ErrUserAlreadyRegistered
-
-	ErrOrderNotFound
-	ErrOrderAlreadyRegistered
-	ErrOrderNumberCollision
-	ErrOrderWrongOwner
-
-	ErrInsufficientFunds
+var (
+	ErrBadCredentials         = errors.New("bad credentials")
+	ErrUserAlreadyRegistered  = errors.New("user is already registered")
+	ErrOrderAlreadyRegistered = errors.New("order already registered")
+	ErrOrderNumberCollision   = errors.New("order number collision")
+	ErrInsufficientFunds      = errors.New("insufficient funds")
 )

@@ -30,14 +30,18 @@ func cli(cfg *config.Config, flag *flag.FlagSet) {
 }
 
 func main() {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(appName))
 	logger.Info().Msg("starting app")
 
 	cfg, err := config.Load(cli)
 	if err != nil {
-		logger.Err(err).Msg("failed to load agent config")
+		logger.Err(err).Msg("failed to load app config")
 		return
 	}
 
@@ -48,24 +52,22 @@ func main() {
 
 	db, err := psql.NewConnection(ctx, cfg)
 	if err != nil {
-		logger.Err(err).Msg("failed to connect to app db")
+		logger.Err(err).Msg("failed to connect to app's db")
 		return
 	}
 	defer db.Close()
 
 	ordersStorage := psql.Orders(db)
 
-	var wg1 sync.WaitGroup
-
 	pending := service.NewPendingOrders()
+	defer pending.Stop()
 
-	if err = service.NewAccruals(cfg, ordersStorage, accrualsClient.Factory(cfg), pending).Start(ctx, &wg1); err != nil {
+	if err = service.NewAccruals(cfg, ordersStorage, accrualsClient.Factory(cfg), pending).Start(ctx, &wg); err != nil {
 		logger.Err(err).Msg("failed to start accruals service")
 		return
 	}
 
-	jwt := service.NewJWT(cfg)
-	auth := service.NewAuth(cfg, psql.Users(db), jwt)
+	auth := service.NewAuth(cfg, psql.Users(db), service.NewJWT(cfg))
 	orders := service.NewOrders(ordersStorage)
 	balance := service.NewBalance(psql.Balance(db), ordersStorage)
 
@@ -88,14 +90,14 @@ func main() {
 		handlers.NewAuthorizeMiddleware(auth, permitted),
 		middleware.Recoverer)
 
-	srvGroup := server.Start(ctx, cfg.RunAddress, handler, serverName)
+	srv := server.Start(ctx, cfg.RunAddress, handler, serverName, &wg)
+	defer func() {
+		logger.Info().Msg("closing server")
+		if err := srv.Close(); err != nil {
+			logger.Err(err).Msg("server close failed")
+		}
+	}()
 
 	<-app.TerminationSignal()
 	logger.Info().Msg("got shutdown signal")
-
-	cancel()
-	srvGroup.Wait()
-	pending.Stop()
-
-	wg1.Wait()
 }

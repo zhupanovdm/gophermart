@@ -35,7 +35,7 @@ SELECT
     COALESCE(a.sum, 0) - COALESCE(w.sum, 0), COALESCE(w.sum, 0)
 FROM
     (SELECT sum(accrual) sum FROM orders WHERE user_id = $1) a,
-    (SELECT sum(sum) sum FROM withdrawals w, orders o WHERE w.order_id = o.id AND o.user_id = $1) w`
+    (SELECT sum(sum) sum FROM withdrawals WHERE user_id = $1) w`
 
 	var sum balance.Balance
 	if err := b.QueryRow(ctx, query, userID).Scan(&sum.Current, &sum.Withdrawn); err != nil {
@@ -43,43 +43,41 @@ FROM
 			logger.Warn().Msg("client's balance record not found")
 			return balance.Balance{}, nil
 		}
-
 		logger.Err(err).Msg("failed to query client balance")
 		return balance.Balance{}, err
 	}
-
 	logger.Trace().Msg("success")
 	return sum, nil
 }
 
-func (b *balanceStorage) Withdraw(ctx context.Context, orderID order.ID, requested model.Sum) (ok bool, err error) {
+func (b *balanceStorage) Withdraw(ctx context.Context, userID user.ID, number order.Number, requested model.Sum) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, b.timeout)
 	defer cancel()
 
-	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName, logging.With(orderID))
+	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName, logging.With(number))
 	logger.Info().Msg("processing withdraw")
 
-	err = b.BeginTxFunc(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
-		sum, err := orderBalance(ctx, tx, orderID)
-		if err != nil {
+	ok := false
+	err := b.BeginTxFunc(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(tx pgx.Tx) error {
+		var sum model.Sum
+		if err := b.QueryRow(ctx, `SELECT accrual - COALESCE((SELECT sum(sum) FROM withdrawals WHERE user_id = $1), 0)
+FROM orders WHERE user_id = $1 AND accrual IS NOT NULL`, userID).Scan(&sum); err != nil && err != pgx.ErrNoRows {
 			logger.Err(err).Msg("failed to query order balance")
-			return err
 		}
 		if sum < requested {
 			logger.Warn().Msg("requested sum exceeds available client balance")
 			return nil
 		}
-		if _, err = tx.Exec(ctx, "INSERT INTO withdrawals(order_id, sum, processed_at) VALUES($1,$2,$3)",
-			orderID, requested, time.Now().Local()); err != nil {
+		if _, err := tx.Exec(ctx, "INSERT INTO withdrawals(order_number, user_id, sum, processed_at) VALUES($1, $2, $3, $4)",
+			number, userID, requested, time.Now().Local()); err != nil {
 			logger.Err(err).Msg("failed to store withdraw transaction")
 			return err
 		}
-
 		ok = true
 		logger.Trace().Msg("success")
 		return nil
 	})
-	return
+	return ok, err
 }
 
 func (b *balanceStorage) Withdrawals(ctx context.Context, userID user.ID) (balance.Withdrawals, error) {
@@ -89,19 +87,7 @@ func (b *balanceStorage) Withdrawals(ctx context.Context, userID user.ID) (balan
 	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName, logging.With(userID))
 	logger.Info().Msg("querying client withdrawals")
 
-	query := `
-SELECT
-	sum,
-	order_number,
-	processed_at
-FROM
-	withdrawals,
-	orders
-WHERE
-	order_number = number
-	AND user_id = $1`
-
-	rows, err := b.Query(ctx, query, userID)
+	rows, err := b.Query(ctx, `SELECT sum, order_number, processed_at FROM withdrawals WHERE user_id = $1`, userID)
 	if err != nil {
 		logger.Err(err).Msg("failed to query withdrawals")
 		return nil, err
@@ -122,25 +108,6 @@ WHERE
 		return nil, err
 	}
 	return list, nil
-}
-
-func orderBalance(ctx context.Context, db queryExecutor, orderID order.ID) (model.Sum, error) {
-	query := `
-SELECT
-    COALESCE(accrual, 0) - COALESCE((SELECT sum(sum) FROM withdrawals WHERE order_id = $1), 0)
-FROM
-    orders o
-WHERE
-    id = $1`
-
-	var sum model.Sum
-	if err := db.QueryRow(ctx, query, orderID).Scan(&sum); err != nil {
-		if err == pgx.ErrNoRows {
-			return model.Sum(0), nil
-		}
-		return model.Sum(0), err
-	}
-	return sum, nil
 }
 
 func Balance(conn *Connection) storage.Balance {

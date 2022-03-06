@@ -11,10 +11,8 @@ import (
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 )
 
-func Start(ctx context.Context, addr string, handler http.Handler, name string) *sync.WaitGroup {
+func Start(ctx context.Context, addr string, handler http.Handler, name string, wg *sync.WaitGroup) *http.Server {
 	_, logger := logging.GetOrCreateLogger(ctx, logging.WithService(name))
-
-	var wg sync.WaitGroup
 
 	srv := &http.Server{
 		Addr:    addr,
@@ -33,18 +31,7 @@ func Start(ctx context.Context, addr string, handler http.Handler, name string) 
 			logger.Err(err).Msg("server stopped")
 		}
 	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		<-ctx.Done()
-		logger.Info().Msg("closing server")
-		if err := srv.Close(); err != nil {
-			logger.Err(err).Msg("server close failed")
-		}
-	}()
-
-	return &wg
+	return srv
 }
 
 func Handler(pattern string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) http.Handler {

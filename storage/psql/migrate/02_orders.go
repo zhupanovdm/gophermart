@@ -6,15 +6,13 @@ const v02up = `
 CREATE TYPE order_status AS ENUM ('NEW', 'PROCESSING', 'INVALID', 'PROCESSED');
 
 CREATE TABLE orders (
-	id BIGSERIAL NOT NULL CONSTRAINT orders_pk PRIMARY KEY,
-    number VARCHAR(64) NOT NULL,
+    number VARCHAR(64) NOT NULL CONSTRAINT orders_pk PRIMARY KEY,
     user_id INT NOT NULL CONSTRAINT orders_users_id_fk REFERENCES users ON DELETE CASCADE,
 	status order_status NOT NULL,
 	uploaded_at TIMESTAMPTZ NOT NULL,
 	accrual DOUBLE PRECISION
 );
 
-CREATE UNIQUE INDEX orders_id_uindex ON orders (id);
 CREATE UNIQUE INDEX orders_number_uindex ON orders (number);`
 
 func init() {

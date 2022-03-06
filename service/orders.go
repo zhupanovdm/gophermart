@@ -5,7 +5,6 @@ import (
 
 	"github.com/zhupanovdm/gophermart/model/order"
 	"github.com/zhupanovdm/gophermart/model/user"
-	"github.com/zhupanovdm/gophermart/pkg/errors"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/storage"
 )
@@ -27,18 +26,16 @@ func (o *ordersImpl) Register(ctx context.Context, number order.Number, userID u
 		logger.Err(err).Msg("order creation failed")
 		return err
 	}
-	logger.UpdateContext(logging.ContextWith(ord))
-
 	if !ok {
 		if ord.UserID == userID {
 			logger.Warn().Msg("order exists")
-			return errors.New(ErrOrderAlreadyRegistered, "already registered")
-		} else {
-			logger.Warn().Msg("order registered by another user")
-			return errors.New(ErrOrderNumberCollision, "already registered by another user")
+			return ErrOrderAlreadyRegistered
 		}
+		logger.Warn().Msg("order registered by another user")
+		return ErrOrderNumberCollision
 	}
 
+	logger.UpdateContext(logging.ContextWith(ord))
 	logger.Trace().Msg("order registered")
 	return nil
 }

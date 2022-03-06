@@ -16,7 +16,7 @@ const (
 	authorizationHandlerName = "Authorization Handler"
 
 	AuthorizationHeader = "Authorization"
-	TokenPrefix         = "Bearer "
+	TokenPrefix         = "Bearer"
 
 	CtxKeyUserID = app.ContextKey("UserID")
 )

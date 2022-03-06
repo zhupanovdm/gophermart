@@ -3,13 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/zhupanovdm/gophermart/model/user"
-	"github.com/zhupanovdm/gophermart/pkg/errors"
 	"github.com/zhupanovdm/gophermart/pkg/logging"
 	"github.com/zhupanovdm/gophermart/pkg/server"
 	"github.com/zhupanovdm/gophermart/service"
@@ -32,7 +32,7 @@ func (h *authenticationHandler) Register(resp http.ResponseWriter, req *http.Req
 		logger.UpdateContext(logging.ContextWith(cred))
 
 		if err := h.Auth.Register(ctx, cred); err != nil {
-			if errors.ErrCode(err) == service.ErrUserAlreadyRegistered {
+			if errors.Is(err, service.ErrUserAlreadyRegistered) {
 				logger.Err(err).Msg("specified login already in use")
 				server.Error(resp, http.StatusConflict, err)
 			} else {
@@ -41,9 +41,7 @@ func (h *authenticationHandler) Register(resp http.ResponseWriter, req *http.Req
 			}
 			return
 		}
-
 		logger.Info().Msg("user registered")
-
 		h.authenticate(ctx, cred, resp)
 	}
 }
@@ -66,19 +64,17 @@ func (h *authenticationHandler) authenticate(ctx context.Context, cred user.Cred
 
 	token, err := h.Auth.Login(ctx, cred)
 	if err != nil {
-		if errors.ErrCode(err) == service.ErrBadCredentials {
+		if errors.Is(err, service.ErrBadCredentials) {
 			logger.Err(err).Msg("client authentication failed")
 			server.Error(resp, http.StatusUnauthorized, err)
 			return
 		}
-
 		logger.Err(err).Msg("failed to register user")
 		server.Error(resp, http.StatusInternalServerError, nil)
 		return
 	}
 
-	resp.Header().Set(AuthorizationHeader, fmt.Sprintf("%s%v", TokenPrefix, token))
-
+	resp.Header().Set(AuthorizationHeader, fmt.Sprint(TokenPrefix, token))
 	logger.Info().Msg("user authenticated")
 }
 

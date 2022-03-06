@@ -23,9 +23,7 @@ type (
 
 	Orders interface {
 		Create(context.Context, *order.Order) (*order.Order, bool, error)
-		Update(context.Context, order.ID, order.Status, *model.Sum) error
-
-		OrderByNumber(ctx context.Context, number order.Number) (*order.Order, error)
+		Update(context.Context, order.Number, order.Status, *model.Sum) error
 
 		OrdersByUser(context.Context, user.ID) (order.Orders, error)
 		OrdersByStatus(context.Context, ...order.Status) (order.Orders, error)
@@ -33,7 +31,7 @@ type (
 
 	Balance interface {
 		Get(context.Context, user.ID) (balance.Balance, error)
-		Withdraw(context.Context, order.ID, model.Sum) (bool, error)
+		Withdraw(context.Context, user.ID, order.Number, model.Sum) (bool, error)
 		Withdrawals(context.Context, user.ID) (balance.Withdrawals, error)
 	}
 )
