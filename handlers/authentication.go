@@ -74,7 +74,7 @@ func (h *authenticationHandler) authenticate(ctx context.Context, cred user.Cred
 		return
 	}
 
-	resp.Header().Set(AuthorizationHeader, fmt.Sprint(TokenPrefix, token))
+	resp.Header().Set(AuthorizationHeader, fmt.Sprint(TokenPrefix, " ", token))
 	logger.Info().Msg("user authenticated")
 }
 
