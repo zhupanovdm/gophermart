@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -74,7 +73,7 @@ func (h *authenticationHandler) authenticate(ctx context.Context, cred user.Cred
 		return
 	}
 
-	resp.Header().Set(AuthorizationHeader, fmt.Sprint(TokenPrefix, " ", token))
+	TokenBearerHeader(resp.Header()).Set(token)
 	logger.Info().Msg("user authenticated")
 }
 

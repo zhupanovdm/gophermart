@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/zhupanovdm/gophermart/model/user"
 	"github.com/zhupanovdm/gophermart/pkg/app"
@@ -14,9 +13,6 @@ import (
 
 const (
 	authorizationHandlerName = "Authorization Handler"
-
-	AuthorizationHeader = "Authorization"
-	TokenPrefix         = "Bearer"
 
 	CtxKeyUserID = app.ContextKey("UserID")
 )
@@ -37,14 +33,13 @@ func (h *authorizationHandler) AuthorizeMiddleware(next http.Handler) http.Handl
 			return
 		}
 
-		token := req.Header.Get(AuthorizationHeader)
-		if !strings.HasPrefix(token, TokenPrefix) {
+		token := TokenBearerHeader(req.Header).Get()
+		if token == user.VoidToken {
 			logger.Warn().Msg("request has no authorization token")
 			server.Error(resp, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
-
-		userID, err := h.Auth.Authorize(ctx, user.Token(token[len(TokenPrefix):]))
+		userID, err := h.Auth.Authorize(ctx, token)
 		if err != nil {
 			logger.Err(err).Msg("client authentication failed")
 			server.Error(resp, http.StatusUnauthorized, "invalid credentials")

@@ -20,7 +20,7 @@ func Test_authenticationHandler_Login(t *testing.T) {
 			name:       "Basic test",
 			body:       `{"login":"Vasily.Pupkin@mail.ru","password":"secret"}`,
 			wantStatus: http.StatusOK,
-			wantHeader: http.Header{AuthorizationHeader: []string{"Bearer " + SampleFakeString}},
+			wantHeader: http.Header{authorizationHeader: []string{tokenPrefix + SampleFakeString}},
 		},
 		{
 			name:       "Bad request",
