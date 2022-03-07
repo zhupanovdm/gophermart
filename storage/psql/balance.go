@@ -87,7 +87,8 @@ func (b *balanceStorage) Withdrawals(ctx context.Context, userID user.ID) (balan
 	ctx, logger := logging.ServiceLogger(ctx, balanceStorageName, logging.With(userID))
 	logger.Info().Msg("querying client withdrawals")
 
-	rows, err := b.Query(ctx, `SELECT sum, order_number, processed_at FROM withdrawals WHERE user_id = $1`, userID)
+	rows, err := b.Query(ctx, `SELECT sum, order_number, processed_at FROM withdrawals WHERE user_id = $1 ORDER BY processed_at`,
+		userID)
 	if err != nil {
 		logger.Err(err).Msg("failed to query withdrawals")
 		return nil, err
@@ -98,7 +99,7 @@ func (b *balanceStorage) Withdrawals(ctx context.Context, userID user.ID) (balan
 	for rows.Next() {
 		var w balance.Withdrawal
 		list = append(list, &w)
-		if err := rows.Scan(&w.Sum, &w.Order, w.ProcessedAt); err != nil {
+		if err := rows.Scan(&w.Sum, &w.Order, &w.ProcessedAt); err != nil {
 			logger.Err(err).Msg("failed to query withdrawals")
 			return nil, err
 		}

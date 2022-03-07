@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	DefaultRunAddress              = "localhost:8081"
-	DefaultDatabaseURI             = "postgresql://postgres:qwe54321@localhost:5432/gophermart?sslmode=disable"
-	DefaultAccrualSystemAddress    = "localhost:8080"
+	DefaultRunAddress              = ":8080"
+	DefaultDatabaseURI             = "postgresql://user:secret@localhost:5432/gophermart?sslmode=disable"
+	DefaultAccrualSystemAddress    = "localhost:8081"
 	DefaultJWTSecretKey            = "Very Secret Key"
 	DefaultJWTTTL                  = 24 * time.Hour
 	DefaultCryptoHash              = crypto.SHA256
