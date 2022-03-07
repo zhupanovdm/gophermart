@@ -87,6 +87,6 @@ func NewAuth(cfg *config.Config, users storage.Users, jwt JWT) Auth {
 	return &authImpl{
 		users:      users,
 		jwt:        jwt,
-		passwdHash: hash.StringWith(cfg.CryptoHash),
+		passwdHash: hash.StringWith(cfg.PasswordCryptoHash),
 	}
 }

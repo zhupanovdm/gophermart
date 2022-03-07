@@ -15,7 +15,7 @@ const (
 	DefaultAccrualSystemAddress    = "localhost:8081"
 	DefaultJWTSecretKey            = "Very Secret Key"
 	DefaultJWTTTL                  = 24 * time.Hour
-	DefaultCryptoHash              = crypto.SHA256
+	DefaultPasswordCryptoHash      = crypto.SHA256
 	DefaultAccrualsPollingInterval = 2 * time.Second
 )
 
@@ -25,7 +25,7 @@ type Config struct {
 	AccrualSystemAddress    string `env:"ACCRUAL_SYSTEM_ADDRESS"`
 	JWTSecret               string
 	JWTTTL                  time.Duration
-	CryptoHash              crypto.Hash
+	PasswordCryptoHash      crypto.Hash
 	AccrualsPollingInterval time.Duration
 	AccrualsWorkersCount    int
 }
@@ -36,7 +36,7 @@ func Load(cli CLIExport) (*Config, error) {
 	cfg := &Config{
 		JWTSecret:               DefaultJWTSecretKey,
 		JWTTTL:                  DefaultJWTTTL,
-		CryptoHash:              DefaultCryptoHash,
+		PasswordCryptoHash:      DefaultPasswordCryptoHash,
 		AccrualsPollingInterval: DefaultAccrualsPollingInterval,
 		AccrualsWorkersCount:    runtime.NumCPU(),
 	}
